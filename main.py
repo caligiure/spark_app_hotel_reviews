@@ -63,6 +63,11 @@ def main():
     print("Top 10 Hotels by Average Score (min 20 reviews):")
     top_hotels.show(truncate=False)
 
+    # Run ML Model
+    print("\n--- Training ML Model for Satisfaction Prediction ---")
+    from ml_model import train_satisfaction_model
+    train_satisfaction_model(df)
+
     # Stop the SparkSession
     spark.stop()
 

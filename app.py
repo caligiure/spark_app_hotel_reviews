@@ -1,6 +1,7 @@
 import streamlit as st
 import pandas as pd
 from main import create_spark_session, load_data, get_top_hotels
+from ml_model import train_satisfaction_model
 
 # Configurazione della pagina
 st.set_page_config(page_title="Hotel Reviews Analytics", layout="wide")
@@ -34,7 +35,7 @@ try:
         # Selezione Query
         query_options = {
             "Top 10 Hotel (Avg Score)": "top_hotels",
-            # "Altra query futura": "other" 
+            "Stima Soddisfazione (ML)": "ml_satisfaction" 
         }
         selected_query = st.sidebar.selectbox("Scegli la query da eseguire:", list(query_options.keys()))
         
@@ -54,6 +55,26 @@ try:
                     
                     # Optional: Charts
                     st.bar_chart(pandas_df.set_index("Hotel_Name")["Average_Score"])
+                
+                elif query_options[selected_query] == "ml_satisfaction":
+                    st.info("Addestramento modello di regressione lineare in corso...")
+                    # Passiamo il dataframe Spark
+                    model, rmse, r2 = train_satisfaction_model(df)
+                    
+                    st.write(f"### Risultati Modello")
+                    st.write(f"**RMSE (Root Mean Squared Error):** {rmse:.4f}")
+                    st.write(f"**R2 (R-squared):** {r2:.4f}")
+                    
+                    lr_model = model.stages[-1]
+                    coeffs = lr_model.coefficients
+                    intercept = lr_model.intercept
+                    
+                    st.write("#### Coefficienti:")
+                    st.write(f"- Intercetta: {intercept:.4f}")
+                    st.write(f"- Peso Average_Score: {coeffs[0]:.4f}")
+                    st.write(f"- Peso Total_Number_of_Reviews: {coeffs[1]:.6f}")
+                    
+                    st.success("Modello addestrato!")
     else:
         st.error("Impossibile caricare il dataset. Controlla che 'Hotel_Reviews.csv' sia nella cartella.")
 
