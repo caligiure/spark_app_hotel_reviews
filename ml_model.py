@@ -7,19 +7,31 @@ from pyspark.ml import Pipeline
 def train_satisfaction_model(df: DataFrame):
     """
     Trains a Linear Regression model to predict 'Reviewer_Score' 
-    based on 'Average_Score' and 'Total_Number_of_Reviews'.
+    based on multiple numerical features.
     """
-    print("Preparing data for ML model...")
+    print("Preparing data for ML model (Expanded Features)...")
 
-    # 1. Select relevant columns and cast if necessary
-    # We filter out any null values in these columns just in case
-    data = df.select("Average_Score", "Total_Number_of_Reviews", "Reviewer_Score") \
-             .dropna()
+    # 1. Select relevant columns
+    # We include more numerical features available in the dataset
+    feature_cols = [
+        "Average_Score", 
+        "Total_Number_of_Reviews", 
+        "Review_Total_Negative_Word_Counts",
+        "Review_Total_Positive_Word_Counts",
+        "Total_Number_of_Reviews_Reviewer_Has_Given",
+        "Additional_Number_of_Scoring"
+    ]
+    
+    # Select features + label
+    data = df.select(*feature_cols, "Reviewer_Score")
+    
+    # Cast proper types just in case (ensure they are doubles/integers)
+    # dropna() is important as MLlib doesn't handle nulls in features gracefully by default
+    data = data.dropna()
 
     # 2. Feature Engineering
-    # Combine input features into a single vector column named 'features'
     assembler = VectorAssembler(
-        inputCols=["Average_Score", "Total_Number_of_Reviews"],
+        inputCols=feature_cols,
         outputCol="features"
     )
 
@@ -31,11 +43,11 @@ def train_satisfaction_model(df: DataFrame):
     # 4. Initialize Linear Regression
     lr = LinearRegression(featuresCol="features", labelCol="Reviewer_Score")
 
-    # 5. Create a Pipeline (good practice, even if simple)
+    # 5. Create a Pipeline
     pipeline = Pipeline(stages=[assembler, lr])
 
     # 6. Train the model
-    print("Training Linear Regression model via Spark MLlib...")
+    print("Training Expanded Linear Regression model...")
     model = pipeline.fit(train_data)
 
     # 7. Make predictions on test data
@@ -58,9 +70,12 @@ def train_satisfaction_model(df: DataFrame):
 
     print(f"Model Trained. RMSE: {rmse:.4f}, R2: {r2:.4f}")
 
-    # Extract the LinearRegressionModel from the PipelineModel to get coefficients
+    # Extract coefficients
     lr_model = model.stages[-1]
-    print(f"Coefficients: {lr_model.coefficients}")
-    print(f"Intercept: {lr_model.intercept}")
+    
+    print("Coefficients:")
+    for col_name, coeff in zip(feature_cols, lr_model.coefficients):
+        print(f" - {col_name}: {coeff:.4f}")
+    print(f" - Intercept: {lr_model.intercept:.4f}")
 
     return model, rmse, r2

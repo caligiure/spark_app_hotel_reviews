@@ -6,10 +6,6 @@ Questo progetto mostra come utilizzare PySpark per analizzare un dataset di rece
 
 ### Campi del dataset
 
-Hotel_Address,Additional_Number_of_Scoring,Review_Date,Average_Score,Hotel_Name,Reviewer_Nationality,Negative_Review,Review_Total_Negative_Word_Counts,Total_Number_of_Reviews,Positive_Review,Review_Total_Positive_Word_Counts,Total_Number_of_Reviews_Reviewer_Has_Given,Reviewer_Score,Tags,days_since_review,lat,lng
-
-### Spiegazione dei campi
-
 Hotel_Address: indirizzo dell'hotel
 Additional_Number_of_Scoring: numero di valutazioni aggiuntive
 Review_Date: data della recensione

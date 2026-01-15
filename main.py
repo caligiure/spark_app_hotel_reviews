@@ -24,7 +24,7 @@ def load_data(spark, csv_file="Hotel_Reviews.csv"):
         print(f"Error loading file: {e}")
         return None
 
-def get_top_hotels(df):
+def get_top_hotels(df, num_results=10):
     """
     Find the top 10 hotels with the highest average Reviewer_Score.
     Filter for hotels with at least 20 reviews.
@@ -41,7 +41,7 @@ def get_top_hotels(df):
     # Filter hotels with at least 20 reviews and sort by Average_Score descending
     top_hotels = hotel_stats.filter(col("Review_Count") >= 20) \
         .orderBy(desc("Average_Score")) \
-        .limit(10)
+        .limit(num_results)
         
     return top_hotels
 
