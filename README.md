@@ -110,3 +110,9 @@ Interpretazione dei risultati:
     * Significa che l'87% del voto di un cliente dipende da fattori che il modello non conosce (es. pulizia della camera specifica, cortesia dello staff in quel momento, umore del cliente), e non dalla **media storica dell'hotel**.
 
 In sintesi: Il modello può dare una stima del futuro grado di soddisfazione dei clienti di ogni hotel, ma questa stima sarà quasi sempre molto vicina alla media storica dell'hotel.
+
+3. ## Sentiment Analysis
+Questa query ha l'obiettivo di **analizzare il sentimento delle recensioni di ogni hotel**.
+In particolare, la query analizza le recensioni di ogni hotel e restituisce il **sentimento** e le **topic** (argomenti) menzionati.
+
+4. ## Individua gli hotel con meno recensioni e mostra il punteggio medio
