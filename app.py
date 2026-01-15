@@ -45,19 +45,19 @@ try:
         st.divider()
         st.subheader(f"Query selezionata: {selected_query}")
         
-        with st.spinner("Caricamento risultati in corso..."):
-            # Query 1: Top Hotels
-            if query_options[selected_query] == "top_hotels":
-                num_results = st.number_input("Seleziona il numero di risultati da visualizzare:", min_value=1, max_value=100, value=10)
-                if st.button("Trova i migliori hotel"):
-                    if num_results > 0 and num_results <= 100 and num_results.is_integer():
-                        st.info(f"Elenco dei migliori hotel in base al punteggio medio ottenuto nelle recensioni dei clienti.")
+        # Query 1: Top Hotels
+        if query_options[selected_query] == "top_hotels":
+            num_results = st.number_input("Seleziona il numero di risultati da visualizzare:", min_value=1, max_value=100, value=10)
+            if st.button("Trova i migliori hotel"):
+                if num_results > 0 and num_results <= 100 and num_results.is_integer():
+                    st.write(f"##### Elenco dei migliori {num_results} hotel in base al punteggio medio ottenuto nelle recensioni dei clienti.")
+                    with st.spinner("Calcolo risultati in corso..."):
                         result_df = get_top_hotels(df, num_results=num_results)
                         # Converto il dataframe Spark in dataframe Pandas per visualizzare i risultati in Streamlit
                         pandas_df = result_df.toPandas()
                         st.dataframe(pandas_df, use_container_width=True)
                         # Visualizzazione con Altair
-                        st.write("#### Grafico Interattivo")
+                        st.write("#### Grafico Hotel per Punteggio Medio")
                         chart = alt.Chart(pandas_df).mark_bar().encode(
                             x=alt.X('Average_Score', title='Punteggio Medio', scale=alt.Scale(domain=[pandas_df["Average_Score"].min() - 0.5, 10])),
                             y=alt.Y('Hotel_Name', sort='-x', title='Hotel'),
@@ -65,69 +65,71 @@ try:
                             tooltip=['Hotel_Name', 'Average_Score', 'Review_Count']
                         ).interactive()
                         st.altair_chart(chart, width='stretch')
-                    else:
-                        st.error("Inserisci un numero valido di risultati.")
+                else:
+                    st.error("Inserisci un numero valido di risultati.")
             
-            # Query 2: ML Satisfaction
-            elif query_options[selected_query] == "ml_satisfaction":
-                if st.button("Addestra Modello e Mostra Coefficienti"):
-                    st.info("Addestramento modello di regressione lineare in corso...")
-                    # Passiamo il dataframe Spark
-                    model, rmse, r2 = train_satisfaction_model(df)
+        # Query 2: ML Satisfaction
+        elif query_options[selected_query] == "ml_satisfaction":
+            if st.button("Addestra Modello e Mostra Coefficienti"):
+                st.info("Addestramento modello di regressione lineare in corso...")
+                # Passiamo il dataframe Spark
+                model, rmse, r2 = train_satisfaction_model(df)
                     
-                    st.write(f"### Risultati Modello")
-                    st.write(f"**RMSE (Root Mean Squared Error):** {rmse:.4f}")
-                    st.write(f"**R2 (R-squared):** {r2:.4f}")
+                st.write(f"### Risultati Modello")
+                st.write(f"**RMSE (Root Mean Squared Error):** {rmse:.4f}")
+                st.write(f"**R2 (R-squared):** {r2:.4f}")
                     
-                    lr_model = model.stages[-1]
-                    coeffs = lr_model.coefficients
-                    intercept = lr_model.intercept
+                lr_model = model.stages[-1]
+                coeffs = lr_model.coefficients
+                intercept = lr_model.intercept
                     
-                    st.write("#### Coefficienti:")
-                    st.write(f"- Intercetta: {intercept:.4f}")
+                st.write("#### Coefficienti:")
+                st.write(f"- Intercetta: {intercept:.4f}")
                     
-                    feature_cols = [
-                        "Average_Score", 
-                        "Total_Number_of_Reviews", 
-                        "Review_Total_Negative_Word_Counts",
-                        "Review_Total_Positive_Word_Counts",
-                        "Total_Number_of_Reviews_Reviewer_Has_Given",
-                        "Additional_Number_of_Scoring"
-                    ]
+                feature_cols = [
+                    "Average_Score", 
+                    "Total_Number_of_Reviews", 
+                    "Review_Total_Negative_Word_Counts",
+                    "Review_Total_Positive_Word_Counts",
+                    "Total_Number_of_Reviews_Reviewer_Has_Given",
+                    "Additional_Number_of_Scoring"
+                ]
                     
-                    coeffs_data = {
-                        "Feature": feature_cols,
-                        "Coefficient": [float(c) for c in coeffs]
-                    }
-                    st.table(pd.DataFrame(coeffs_data))
+                coeffs_data = {
+                    "Feature": feature_cols,
+                    "Coefficient": [float(c) for c in coeffs]
+                }
+                st.table(pd.DataFrame(coeffs_data))
                     
                     
-                    st.success("Modello addestrato!")
+                st.success("Modello addestrato!")
             
-            # Query 3: Sentiment Analysis
-            elif query_options[selected_query] == "sentiment_analysis":
-                st.info("Questa funzionalità richiede **Ollama** installato in locale.")
-                
-                col1, col2 = st.columns(2)
-                with col1:
-                    model_name = st.text_input("Nome Modello Ollama", value="llama3", help="Assicurati di aver fatto 'ollama pull <nome>'")
-                with col2:
-                    sample_size = st.number_input("Numero di recensioni da analizzare", min_value=1, max_value=20, value=3)
-                
-                if st.button("Avvia Analisi Sentimento"):
-                    st.warning("⚠️ L'analisi richiede tempo (diversi secondi per recensione su CPU). Attendi...")
-                    with st.spinner(f"Sto chiedendo a {model_name} di leggere le recensioni..."):
-                        sentiment_df = analyze_sentiment_sample(df, sample_size=sample_size, model_name=model_name)
-                    
-                    if not sentiment_df.empty:
-                        st.write("### Risultati Analisi")
-                        st.dataframe(sentiment_df)
-                        
-                        # Simple stats
-                        st.write("#### Distribuzione Sentimenti")
-                        st.bar_chart(sentiment_df["LLM Sentiment"].value_counts())
-                    else:
-                        st.error("Nessun risultato o errore di connessione con Ollama.")
+        # Query 3: Sentiment Analysis
+        elif query_options[selected_query] == "sentiment_analysis":
+            st.info("Questa funzionalità richiede **Ollama** installato in locale.")
+            col1, col2 = st.columns(2)
+            with col1:
+                model_name = st.text_input("Nome Modello Ollama", value="llama3", help="Assicurati di aver fatto 'ollama pull <nome>'")
+            with col2:
+                sample_size = st.number_input("Numero di recensioni da analizzare", min_value=1, max_value=20, value=3)
+            if st.button("Avvia Sentiment Analysis"):
+                warning_placeholder = st.empty() # Crea un placeholder per il warning
+                warning_placeholder.warning("⚠️ L'analisi richiede tempo (diversi secondi per recensione su CPU). Attendi...")
+                with st.spinner(f"Sto chiedendo a {model_name} di leggere le recensioni..."):
+                    sentiment_df = analyze_sentiment_sample(df, sample_size=sample_size, model_name=model_name)
+                warning_placeholder.empty() # Rimuove il warning una volta completato il caricamento
+                if not sentiment_df.empty:
+                    st.write("### Risultati Analisi")
+                    for index, row in sentiment_df.iterrows():
+                        sentiment_emoji = "😊" if row["LLM Sentiment"] == "Positive" else "😡" if row["LLM Sentiment"] == "Negative" else "😐"
+                        with st.expander(f"{sentiment_emoji} {row['Hotel']} - {row['LLM Sentiment']} (Score: {row['Review Score']})"):
+                            st.write(f"**Topics:** {row['LLM Topics']}")
+                            st.markdown(f"_{row['Review Text']}_")
+                    # Simple stats
+                    st.write("#### Distribuzione Sentimenti")
+                    st.bar_chart(sentiment_df["LLM Sentiment"].value_counts())
+                else:
+                    st.error("Nessun risultato o errore di connessione con Ollama.")
     else:
         st.error("Impossibile caricare il dataset. Controlla che 'Hotel_Reviews.csv' sia nella cartella.")
 

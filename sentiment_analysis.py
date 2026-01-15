@@ -23,21 +23,17 @@ def analyze_review_with_ollama(review_text: str, model_name: str = "llama3"):
     payload = {
         "model": model_name,
         "prompt": prompt,
-        "stream": False,
-        "format": "json"  # Force JSON mode if model supports it (Ollama 0.1.28+)
+        "stream": False,  # Disabilita lo streaming, cioè non riceve una risposta in streaming
+        "format": "json"  # Forza il formato JSON se il modello lo supporta (Ollama 0.1.28+)
     }
     
     try:
-        response = requests.post(OLLAMA_API_URL, json=payload)
-        response.raise_for_status()
-        
-        result = response.json()
-        response_text = result.get("response", "{}")
-        
-        # Parse the JSON string returned by the LLM
-        analysis = json.loads(response_text)
+        response = requests.post(OLLAMA_API_URL, json=payload) # effettua una richiesta POST all'API di Ollama
+        response.raise_for_status() # solleva un'eccezione se la richiesta non ha successo
+        result = response.json() # estrae il contenuto JSON dalla risposta
+        response_text = result.get("response", "{}") # estrae il contenuto del campo "response" del JSON
+        analysis = json.loads(response_text) # converte il contenuto del campo "response" in un oggetto Python
         return analysis
-        
     except Exception as e:
         return {"sentiment": "Error", "topics": [], "error": str(e)}
 
@@ -48,9 +44,9 @@ def analyze_sentiment_sample(df: DataFrame, sample_size: int = 5, model_name: st
     """
     print(f"Sampling {sample_size} reviews for sentiment analysis...")
     
-    # 1. Sample N rows from Spark DataFrame
-    # We take rows that have some text in Positive or Negative review
-    # We construct a full text for analysis
+    # 1. Estrae N righe dal DataFrame Spark
+    # 2. Estrae righe che hanno testo in Positive o Negative review
+    # 3. Costruisce un testo completo per l'analisi
     sampled_rows = df.filter("Negative_Review != 'No Negative' OR Positive_Review != 'No Positive'") \
                      .limit(sample_size * 2) \
                      .sample(withReplacement=False, fraction=1.0) \
@@ -75,7 +71,7 @@ def analyze_sentiment_sample(df: DataFrame, sample_size: int = 5, model_name: st
         
         results.append({
             "Hotel": row["Hotel_Name"],
-            "Review Text": full_text[:150] + "...",  # Truncate for display
+            "Review Text": full_text,
             "Review Score": row["Reviewer_Score"],
             "LLM Sentiment": analysis.get("sentiment", "Unknown"),
             "LLM Topics": ", ".join(analysis.get("topics", [])),
