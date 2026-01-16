@@ -3,13 +3,12 @@ from pyspark.sql.functions import col, avg, count, desc
 
 def create_spark_session(app_name="HotelReviewsAnalysis"):
     """Initialize SparkSession"""
-    # 'local[*]' uses all available cores on the local machine
+    # 'local[*]' usa tutti i core disponibili del computer locale
     spark = SparkSession.builder \
         .appName(app_name) \
         .master("local[*]") \
         .getOrCreate()
-    
-    # Set log level to WARN to reduce console clutter
+    # imposta log level a WARN per ridurre il numero di messaggi di debug in console
     spark.sparkContext.setLogLevel("WARN")
     return spark
 
@@ -30,15 +29,13 @@ def get_top_hotels(df, num_results=10):
     Filter for hotels with at least 20 reviews.
     """
     print("Calculating average score per hotel...")
-    
-    # Group by Hotel_Name
+    # raggruppa per Hotel_Name, aggrega e calcola la media dei Reviewer_Score e il conteggio dei Reviewer_Score
     hotel_stats = df.groupBy("Hotel_Name") \
         .agg(
             avg("Reviewer_Score").alias("Average_Score"),
             count("Reviewer_Score").alias("Review_Count")
         )
-
-    # Filter hotels with at least 20 reviews and sort by Average_Score descending
+    # filtra gli hotel con almeno 20 recensioni e ordina per Average_Score in ordine decrescente
     top_hotels = hotel_stats.filter(col("Review_Count") >= 20) \
         .orderBy(desc("Average_Score")) \
         .limit(num_results)

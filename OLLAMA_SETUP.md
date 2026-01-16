@@ -35,6 +35,18 @@ ollama pull llama3
 ollama pull mistral
 ```
 
+**Opzione C: Modelli Ultra-Veloci (Consigliati per CPU)**
+Se `phi3` è troppo lento, prova questi modelli molto più piccoli:
+
+*   **TinyLlama** (1.1GB - Molto veloce):
+    ```powershell
+    ollama pull tinyllama
+    ```
+*   **Qwen2 0.5B** (350MB - Istantaneo, ma meno preciso):
+    ```powershell
+    ollama pull qwen2:0.5b
+    ```
+
 ## 4. Test Rapido
 Per verificare che il modello funzioni, scrivi:
 ```powershell

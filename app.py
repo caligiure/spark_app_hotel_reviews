@@ -1,6 +1,7 @@
 import streamlit as st
 import pandas as pd
 from main import create_spark_session, load_data, get_top_hotels
+from queries import get_top_hotels_by_nation
 from ml_model import train_satisfaction_model
 from sentiment_analysis import (
     fetch_hotel_reviews, 
@@ -14,15 +15,13 @@ import altair as alt
 
 # Configurazione della pagina
 st.set_page_config(page_title="Hotel Reviews Analytics", layout="wide")
-
-st.title("📊 Hotel Reviews Analytics con Spark")
+st.header("📊 Hotel Reviews Analytics con Spark")
 
 # Inizializzazione Spark (Cached per evitare riavvii)
 @st.cache_resource
 def get_spark_session():
     return create_spark_session("HotelReviewsGUI")
-
-# Caricamento dati (Cached as Resource because Spark DataFrames are not picklable for cache_data)
+# Caricamento dati (Cached)
 @st.cache_resource
 def get_data(_spark):
     return load_data(_spark)
@@ -31,27 +30,24 @@ def get_data(_spark):
 try:
     with st.spinner("Inizializzazione Spark..."):
         spark = get_spark_session()
-    
     with st.spinner("Caricamento dati..."):
         df = get_data(spark)
-
     if df:
-        st.success(f"Dati caricati con successo! Totale righe: {df.count()}")
-        
+        if "get_data_notification_shown" not in st.session_state:
+            st.toast(f"Dati caricati con successo! Totale righe: {df.count()}", icon='✅')
+            st.session_state.get_data_notification_shown = True
         # Sidebar per controlli
         st.sidebar.header("Opzioni Query")
-        
         # Selezione Query
         query_options = {
             "Top Hotels (Avg Score)": "top_hotels",
+            "Migliori Hotel per Nazione": "top_hotels_by_nation",
             "Stima Soddisfazione (ML)": "ml_satisfaction",
             "Sentiment Analysis (Local LLM)": "sentiment_analysis" 
         }
         selected_query = st.sidebar.radio("Scegli la query da eseguire:", list(query_options.keys()))
-        
         st.divider()
         st.subheader(f"Query selezionata: {selected_query}")
-        
         # Query 1: Top Hotels
         if query_options[selected_query] == "top_hotels":
             num_results = st.number_input("Seleziona il numero di risultati da visualizzare:", min_value=1, max_value=100, value=10)
@@ -75,6 +71,33 @@ try:
                 else:
                     st.error("Inserisci un numero valido di risultati.")
             
+        # Query: Top Hotels by Nation
+        elif query_options[selected_query] == "top_hotels_by_nation":
+            n_per_nation = st.number_input("Numero di migliori hotel da visualizzare per ogni nazione:", min_value=1, max_value=50, value=3)
+            
+            if st.button("Analizza per Nazione"):
+                 with st.spinner("Analisi dataset in corso..."):
+                    # Esegui la query
+                    nation_results = get_top_hotels_by_nation(df, n=n_per_nation)
+                    
+                    # Converti a Pandas per visualizzazione
+                    nation_pdf = nation_results.toPandas()
+                    
+                    st.write(f"### Top {n_per_nation} Hotel per Nazione (per Punteggio Medio)")
+                    st.dataframe(nation_pdf, use_container_width=True)
+                    
+                    # Optional: Bar chart for visual comparison (grouped)
+                    # Potrebbe essere troppa roba se ci sono tante nazioni, ma proviamo a mettere un grafico semplice
+                    if not nation_pdf.empty:
+                        st.write("#### Distribuzione Punteggi Top Hotel")
+                        chart = alt.Chart(nation_pdf).mark_bar().encode(
+                            x=alt.X('Average_Score:Q', title='Punteggio Medio', scale=alt.Scale(domain=[nation_pdf['Average_Score'].min()*0.9, 10])),
+                            y=alt.Y('Hotel_Name:N', sort='-x', title='Hotel'),
+                            color='Nation:N',
+                            tooltip=['Nation', 'Hotel_Name', 'Average_Score']
+                        ).interactive()
+                        st.altair_chart(chart, use_container_width=True)
+
         # Query 2: ML Satisfaction
         elif query_options[selected_query] == "ml_satisfaction":
             if st.button("Addestra Modello e Mostra Coefficienti"):
@@ -114,22 +137,19 @@ try:
         # Query 3: Sentiment Analysis
         elif query_options[selected_query] == "sentiment_analysis":
             st.info("Questa funzionalità richiede **Ollama** installato in locale.")
-            
             # --- Configurazione ---
             col1, col2 = st.columns(2)
             with col1:
                 hotel_name = st.text_input("Inserisci nome Hotel", value="Ritz Paris")
-                model_name = st.text_input("Modello Ollama", value="llama3")
+                model_name = st.selectbox("Modello Ollama", ["qwen2:0.5b", "tinyllama", "qwen2.5:1.5b", "phi3", "llama3"])
             with col2:
                 # Limitiamo per evitare attese infinite in demo
-                max_reviews = st.number_input("Max recensioni da analizzare", value=30, max_value=200)
-
+                max_reviews = st.number_input("Max recensioni da analizzare", value=30, min_value=1, max_value=200)
             # --- Stato Sessione per Caching ---
             if "enriched_df" not in st.session_state:
                 st.session_state["enriched_df"] = None
             if "current_hotel" not in st.session_state:
                 st.session_state["current_hotel"] = ""
-
             # --- Bottone "Prepara Dati" (Esegue LLM) ---
             st.divider()
             if st.button("🚀 1. Prepara/Aggiorna Dati (Esegui LLM)"):
@@ -152,11 +172,10 @@ try:
                 enriched_df = st.session_state["enriched_df"]
                 st.write(f"✅ Dati pronti per: **{st.session_state['current_hotel']}** ({len(enriched_df)} recensioni)")
                 
-                tab1, tab2, tab3, tab4 = st.tabs([
+                tab1, tab2, tab3 = st.tabs([
                     "Parole Chiave Negative", 
                     "Trend Temporali", 
-                    "Correlazione Voto", 
-                    "Dissonanze"
+                    "Correlazione Voto"
                 ])
                 
                 with tab1:
@@ -202,18 +221,7 @@ try:
                         else:
                             st.info("Nessun dato significativo.")
 
-                with tab4:
-                    st.write("### Dissonanze (Voto Alto ma Sentiment Negativo)")
-                    threshold = st.slider("Soglia Voto Alto", 7.0, 10.0, 8.0)
-                    if st.button("Esegui Query: Dissonanze"):
-                        disc_df = get_discrepancies(enriched_df, score_threshold=threshold)
-                        if not disc_df.empty:
-                            st.warning(f"Trovate {len(disc_df)} recensioni sospette.")
-                            for i, row in disc_df.iterrows():
-                                st.write(f"**Voto: {row['Reviewer_Score']}** - {row['Review_Text']}")
-                                st.divider()
-                        else:
-                            st.success("Nessuna dissonanza trovata.")
+
 
             else:
                 st.info("👆 Clicca su 'Prepara Dati' per iniziare.")

@@ -32,19 +32,19 @@ def test_advanced_insights():
     mock_data = [
         {
             "Review_Date": "8/3/2017", "Reviewer_Score": 9.0, "Review_Text": "Great location but noisy.", 
-            "LLM_Sentiment": "Negative", "LLM_Topics": ["Location", "Noise"]
+            "Derived_Sentiment": "Negative", "LLM_Topics": ["Location", "Noise"]
         },
         {
             "Review_Date": "7/15/2017", "Reviewer_Score": 5.0, "Review_Text": "Terrible service.", 
-            "LLM_Sentiment": "Negative", "LLM_Topics": ["Service"]
+            "Derived_Sentiment": "Negative", "LLM_Topics": ["Service"]
         },
         {
             "Review_Date": "6/10/2017", "Reviewer_Score": 10.0, "Review_Text": "Perfect.", 
-            "LLM_Sentiment": "Positive", "LLM_Topics": ["Everything"]
+            "Derived_Sentiment": "Positive", "LLM_Topics": ["Everything"]
         },
         {
             "Review_Date": "8/4/2017", "Reviewer_Score": 8.5, "Review_Text": "Good but expensive.", 
-            "LLM_Sentiment": "Negative", "LLM_Topics": ["Value"]
+            "Derived_Sentiment": "Negative", "LLM_Topics": ["Value"]
         }
     ]
     enriched_df = pd.DataFrame(mock_data)
