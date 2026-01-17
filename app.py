@@ -16,7 +16,6 @@ import altair as alt
 # Configurazione della pagina
 st.set_page_config(page_title="Hotel Reviews Analytics", layout="wide")
 st.header("📊 Hotel Reviews Analytics con Spark")
-
 # Inizializzazione Spark (Cached per evitare riavvii)
 @st.cache_resource
 def get_spark_session():
@@ -40,16 +39,40 @@ try:
         st.sidebar.header("Opzioni Query")
         # Selezione Query
         query_options = {
-            "Top Hotels (Avg Score)": "top_hotels",
             "Migliori Hotel per Nazione": "top_hotels_by_nation",
+            "Top Hotels (Avg Score)": "top_hotels",
             "Stima Soddisfazione (ML)": "ml_satisfaction",
             "Sentiment Analysis (Local LLM)": "sentiment_analysis" 
         }
         selected_query = st.sidebar.radio("Scegli la query da eseguire:", list(query_options.keys()))
         st.divider()
         st.subheader(f"Query selezionata: {selected_query}")
+            
+        # Query: Top Hotels by Nation
+        if query_options[selected_query] == "top_hotels_by_nation":
+            st.write("Questa query consente di individuare i **migliori hotel per ogni nazione**. Il criterio di ranking utilizzato è il **punteggio medio** ottenuto nelle recensioni dei clienti, inoltre in caso di parità si predilige l'hotel con il **numero totale di recensioni** più elevato.")
+            n_per_nation = st.number_input("Numero di migliori hotel da visualizzare per ogni nazione:", min_value=1, max_value=50, value=3)
+            if st.button("Analizza per Nazione"):
+                 with st.spinner("Analisi dataset in corso..."):
+                    # Esegui la query (da queries.py)
+                    nation_results = get_top_hotels_by_nation(df, n=n_per_nation)
+                    # Converti a Pandas (pdf = pandas dataframe) e visualizza risultati
+                    nation_pdf = nation_results.toPandas()
+                    st.write(f"### Top {n_per_nation} Hotel per Nazione")
+                    st.dataframe(nation_pdf, width='stretch')
+                    # Grafico a barre per confrontare i punteggi
+                    if not nation_pdf.empty:
+                        st.write("#### Distribuzione dei Punteggi degli Hotel")
+                        chart = alt.Chart(nation_pdf).mark_bar().encode(
+                            x=alt.X('Average_Score:Q', title='Punteggio Medio', scale=alt.Scale(domain=[nation_pdf['Average_Score'].min()*0.9, 10])),
+                            y=alt.Y('Hotel_Name:N', sort='-x', title='Hotel'), # -x ordina gli hotel dall'alto al basso in base al valore dell'asse X, in ordine decrescente
+                            color='Nation:N',
+                            tooltip=['Nation', 'Hotel_Name', 'Average_Score']
+                        ).interactive()
+                        st.altair_chart(chart, width='stretch')
+
         # Query 1: Top Hotels
-        if query_options[selected_query] == "top_hotels":
+        elif query_options[selected_query] == "top_hotels":
             num_results = st.number_input("Seleziona il numero di risultati da visualizzare:", min_value=1, max_value=100, value=10)
             if st.button("Trova i migliori hotel"):
                 if num_results > 0 and num_results <= 100 and num_results.is_integer():
@@ -70,33 +93,6 @@ try:
                         st.altair_chart(chart, width='stretch')
                 else:
                     st.error("Inserisci un numero valido di risultati.")
-            
-        # Query: Top Hotels by Nation
-        elif query_options[selected_query] == "top_hotels_by_nation":
-            n_per_nation = st.number_input("Numero di migliori hotel da visualizzare per ogni nazione:", min_value=1, max_value=50, value=3)
-            
-            if st.button("Analizza per Nazione"):
-                 with st.spinner("Analisi dataset in corso..."):
-                    # Esegui la query
-                    nation_results = get_top_hotels_by_nation(df, n=n_per_nation)
-                    
-                    # Converti a Pandas per visualizzazione
-                    nation_pdf = nation_results.toPandas()
-                    
-                    st.write(f"### Top {n_per_nation} Hotel per Nazione (per Punteggio Medio)")
-                    st.dataframe(nation_pdf, use_container_width=True)
-                    
-                    # Optional: Bar chart for visual comparison (grouped)
-                    # Potrebbe essere troppa roba se ci sono tante nazioni, ma proviamo a mettere un grafico semplice
-                    if not nation_pdf.empty:
-                        st.write("#### Distribuzione Punteggi Top Hotel")
-                        chart = alt.Chart(nation_pdf).mark_bar().encode(
-                            x=alt.X('Average_Score:Q', title='Punteggio Medio', scale=alt.Scale(domain=[nation_pdf['Average_Score'].min()*0.9, 10])),
-                            y=alt.Y('Hotel_Name:N', sort='-x', title='Hotel'),
-                            color='Nation:N',
-                            tooltip=['Nation', 'Hotel_Name', 'Average_Score']
-                        ).interactive()
-                        st.altair_chart(chart, use_container_width=True)
 
         # Query 2: ML Satisfaction
         elif query_options[selected_query] == "ml_satisfaction":

@@ -30,17 +30,15 @@ def get_top_hotels_by_nation(df, n=10):
          .otherwise(F.col("Nation_Raw"))
     )
     
-    # 3. Logica di Ranking (Top N per Nazione)
-    # Definiamo una finestra partizionata per Nazione e ordinata per Average_Score decrescente.
+    # 3. Ranking (Top N per Nazione)
+    # Definiamo una finestra partizionata per Nazione e ordinata per Average_Score decrescente
     # Se due hotel hanno lo stesso punteggio, vince chi ha più recensioni (Total_Number_of_Reviews).
     window_spec = Window.partitionBy("Nation").orderBy(F.col("Average_Score").desc(), F.col("Total_Number_of_Reviews").desc())
     # Nota: una Window Function permette di eseguire calcoli su un gruppo di righe correlate alla riga corrente, 
     # senza collassare le righe in una sola (come fa invece groupBy).
 
-    # Aggiungiamo il rank
+    # Aggiungiamo il rank (F.rank() assegna un numero unico a ogni riga all'interno di ogni partizione)
     df_ranked = df_with_nation.withColumn("rank", F.rank().over(window_spec))
-    # Nota: rank() assegna un numero unico a ogni riga all'interno di ogni partizione, 
-    # mantenendo l'ordine specificato (in questo caso, decrescente di Average_Score).
     
     # 4. Filtriamo i top n
     top_hotels = df_ranked.filter(F.col("rank") <= n)
@@ -53,5 +51,7 @@ def get_top_hotels_by_nation(df, n=10):
         "Total_Number_of_Reviews",
         "Hotel_Address"
     ).orderBy("Nation", F.col("Average_Score").desc())
-    
+    # Nota: orderBy() impone questo ordinamento: 
+    # 1. per Nation (in ordine alfabetico crescente)
+    # 2. per Average_Score (in ordine decrescente)
     return result

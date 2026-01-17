@@ -28,7 +28,7 @@ lng: longitudine
 
 1.  **Python** (installato)
 2.  **Java JDK** (installato)
-3.  **PySpark** (installato via `pip install pyspark`)
+3.  **PySpark, Pandas, Streamlit** (installato via `pip install pyspark`)
 4.  **Winutils** (Necessario su Windows)
 
 ### Configurazione Winutils (IMPORTANTE)
@@ -45,7 +45,7 @@ Per eseguire Spark su Windows senza errori, è necessario configurare `winutils.
     *   Copia i file scaricati (`winutils.exe` e `hadoop.dll`) dentro `C:\hadoop\bin`.
 
 3.  **Imposta le Variabili d'Ambiente**:
-    *   Apri "Modifica le variabili di ambiente relative al sistema" (cerca "env" nel menu Start).
+    *   Apri "Modifica le variabili di ambiente relative al sistema"
     *   Crea una nuova variabile utente o di sistema:
         *   Nome: `HADOOP_HOME`
         *   Valore: `C:\hadoop` (senza `\bin`)
