@@ -77,9 +77,21 @@ Per eseguire Spark su Windows senza errori, è necessario configurare `winutils.
    
 # Elenco delle query
 
-## 1. get_top_hotels (main.py)
+## get_top_hotels_by_nation (app.py)
+Questa query ha l'obiettivo di **trovare i top hotel per ogni nazione**.
+In particolare, la query restituisce i top hotel per ogni nazione, basandosi sul punteggio medio che ogni hotel ha ottenuto nelle valutazioni e sul numero di recensioni che ha ricevuto.
 
-## 2. Estimate future customer satisfaction (query di predizione, ml_model.py)
+## query tasso di crescita/decrescita dei punteggi
+
+## 
+
+## query con map reduce
+
+## regressione per scoprire quali termini influenzano di più le recensioni
+
+## clustering degli hotel
+
+## Estimate future customer satisfaction (query di predizione, ml_model.py)
 Questa query ha l'obiettivo di **predire il futuro grado di soddisfazione dei clienti di ogni hotel**, basandosi sul punteggio medio che ogni hotel ha ottenuto nelle valutazioni e sul numero di recensioni che ha ricevuto.
 In particolare, la query predice il **Reviewer_Score** della prossima valutazione di ogni hotel, basandosi sul suo *Average_Score* e sul suo *Total_Number_of_Reviews*.
 

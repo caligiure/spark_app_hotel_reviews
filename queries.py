@@ -1,5 +1,9 @@
 from pyspark.sql import functions as F
 from pyspark.sql.window import Window
+from pyspark.sql.types import StructType, StructField, StringType, FloatType, IntegerType, DateType
+import pandas as pd
+from sklearn.linear_model import LinearRegression
+import numpy as np
 
 def get_top_hotels_by_nation(df, n=10):
     """
@@ -55,3 +59,85 @@ def get_top_hotels_by_nation(df, n=10):
     # 1. per Nation (in ordine alfabetico crescente)
     # 2. per Average_Score (in ordine decrescente)
     return result
+
+
+
+
+def analyze_review_trends(df):
+    """
+    Analizza il trend temporale dei punteggi delle recensioni per ogni hotel.
+    Utilizza una Pandas UDF per calcolare la regressione lineare su ogni gruppo.
+    """
+
+    # UDF Pandas che verrà eseguita su ogni gruppo (Hotel)
+    # pdf è un pandas DataFrame contenente le recensioni di UN solo hotel
+    # Nota: è importante definire una funzione Pandas, che sarà eseguita con applyInPandas,
+    # in modo tale che Spark possa mantenere il parallelismo e non dover eseguire la UDF in un unico worker.
+    def calculate_trend(pdf): 
+        if pdf.empty or len(pdf) < 2: # Non abbastanza dati per un trend, restituisce un DataFrame vuoto
+            return pd.DataFrame()
+            
+        # 1. Ordina per data (fondamentale per il trend temporale) ed elimina le righe con data non valida
+        # coerce: converte le date non valide in NaN
+        pdf['Review_Date'] = pd.to_datetime(pdf['Review_Date'], format='%m/%d/%Y', errors='coerce')
+        pdf = pdf.dropna(subset=['Review_Date'])
+        pdf = pdf.sort_values('Review_Date')
+        if len(pdf) < 2: # Non abbastanza dati per un trend, restituisce un DataFrame vuoto
+            return pd.DataFrame()
+
+        # 2. Prepara dati per regressione
+        # X: Tempo convertito in numeri ordinali
+        # y: Punteggio recensione
+        pdf['Date_Ordinal'] = pdf['Review_Date'].map(pd.Timestamp.toordinal)
+        X = pdf['Date_Ordinal'].values.reshape(-1, 1) # Reshape per LinearRegression (converte in array di array)
+        y = pdf['Reviewer_Score'].values
+        
+        # 3. Fit Modello Lineare per correlazione tra data e punteggio
+        model = LinearRegression() # da sklearn.linear_model
+        model.fit(X, y)         # Calcola il modello lineare: 
+                                # trova la linea retta (y = mx+q) che meglio si adatta ai dati (best fit line)
+                                # dove m è il coefficiente angolare e q è l'intercetta
+        slope = model.coef_[0]  # In questo caso ci interessa solo il valore di m (slope), che è il nostro trend temporale
+        # Se slope > 0: Trend Crescente
+        # Se slope < 0: Trend Decrescente
+        
+        return pd.DataFrame({
+            "Hotel_Name": [pdf['Hotel_Name'].iloc[0]], # prende il nome del hotel dalla prima riga del DataFrame
+            "Trend_Slope": [float(slope)],
+            "Review_Count": [len(pdf)],
+            "Average_Score_Calculated": [float(y.mean())],
+            "Min_Date": [pdf['Review_Date'].min()],
+            "Max_Date": [pdf['Review_Date'].max()]
+        })
+
+    # Schema di output della UDF
+    schema = StructType([
+        StructField("Hotel_Name", StringType(), True),
+        StructField("Trend_Slope", FloatType(), True),
+        StructField("Review_Count", IntegerType(), True),
+        StructField("Average_Score_Calculated", FloatType(), True),
+        StructField("Min_Date", DateType(), True),
+        StructField("Max_Date", DateType(), True)
+    ])
+
+    # Riduce il dataset su cui lavorare, selezionando solo le 3 colonne strettamente necessarie, 
+    # per evitare di passare colonne superflue e non utilizzate alla UDF Pandas.
+    # Nota: spostare dati da Spark (JVM) a Pandas (Python) è costoso, quindi è meglio spostare solo i dati necessari.
+    input_df = df.select("Hotel_Name", "Review_Date", "Reviewer_Score")
+
+    # Esecuzione GroupBy + ApplyInPandas
+    trends = input_df.groupBy("Hotel_Name").applyInPandas(calculate_trend, schema=schema)
+    # Nota: ApplyInPandas è un'operazione distribuita, quindi Spark mantiene la parallelizzazione.
+    # Per ogni gruppo (Hotel_Name) Spark invia i dati al worker (Python), il quale esegue la UDF Pandas.
+    # Spark raccoglie i risultati di tutti questi calcoli paralleli e li unisce in un unico nuovo DataFrame Spark (trends),
+    # rispettando la struttura definita in schema.
+    
+    # Aggiunge una colonna "Trend_Description" che spiega l'andamento del trend.
+    trends = trends.withColumn(
+        "Trend_Description",
+        F.when(F.col("Trend_Slope") > 0.0001, "Crescente 📈") # Se slope > 0.0001, trend crescente
+         .when(F.col("Trend_Slope") < -0.0001, "Decrescente 📉") # Se slope < -0.0001, trend decrescente
+         .otherwise("Stabile ➖") # Se slope è tra -0.0001 e 0.0001, trend stabile
+    )
+    
+    return trends

@@ -1,7 +1,7 @@
 import streamlit as st
 import pandas as pd
 from main import create_spark_session, load_data, get_top_hotels
-from queries import get_top_hotels_by_nation
+from queries import get_top_hotels_by_nation, analyze_review_trends
 from ml_model import train_satisfaction_model
 from sentiment_analysis import (
     fetch_hotel_reviews, 
@@ -35,19 +35,21 @@ try:
         if "get_data_notification_shown" not in st.session_state:
             st.toast(f"Dati caricati con successo! Totale righe: {df.count()}", icon='✅')
             st.session_state.get_data_notification_shown = True
+        
         # Sidebar per controlli
         st.sidebar.header("Opzioni Query")
         # Selezione Query
         query_options = {
             "Migliori Hotel per Nazione": "top_hotels_by_nation",
+            "Trend Recensioni (Time Series)": "review_trends",
             "Top Hotels (Avg Score)": "top_hotels",
             "Stima Soddisfazione (ML)": "ml_satisfaction",
-            "Sentiment Analysis (Local LLM)": "sentiment_analysis" 
+            "Sentiment Analysis (Local LLM)": "sentiment_analysis"
         }
         selected_query = st.sidebar.radio("Scegli la query da eseguire:", list(query_options.keys()))
         st.divider()
         st.subheader(f"Query selezionata: {selected_query}")
-            
+        
         # Query: Top Hotels by Nation
         if query_options[selected_query] == "top_hotels_by_nation":
             st.write("Questa query consente di individuare i **migliori hotel per ogni nazione**. Il criterio di ranking utilizzato è il **punteggio medio** ottenuto nelle recensioni dei clienti, inoltre in caso di parità si predilige l'hotel con il **numero totale di recensioni** più elevato.")
@@ -70,6 +72,41 @@ try:
                             tooltip=['Nation', 'Hotel_Name', 'Average_Score']
                         ).interactive()
                         st.altair_chart(chart, width='stretch')
+
+        # Query: Trend Recensioni
+        elif query_options[selected_query] == "review_trends":
+            st.write("Questa analisi calcola il **trend temporale** dei punteggi per ogni hotel utilizzando la **Regressione Lineare**.")
+            st.write("Viene identificato se la reputazione dell'hotel è in crescita (📈), decrescita (📉) o stabile (➖).")
+            
+            if st.button("Calcola Trend per tutti gli Hotel"):
+                with st.spinner("Calcolo regressione lineare per ogni hotel in corso... (potrebbe richiedere qualche secondo)"):
+                    trends_df = analyze_review_trends(df)
+                    # Convert to Pandas for display
+                    trends_pdf = trends_df.toPandas()
+                    
+                    if not trends_pdf.empty:
+                        # Top Improving
+                        st.subheader("🏆 Top 10 Hotel in Crescita")
+                        improving = trends_pdf[trends_pdf['Trend_Slope'] > 0].sort_values('Trend_Slope', ascending=False).head(10)
+                        st.dataframe(improving[['Hotel_Name', 'Trend_Slope', 'Review_Count', 'Trend_Description', 'Average_Score_Calculated']], use_container_width=True)
+                        
+                        # Top Declining
+                        st.subheader("⚠️ Top 10 Hotel in Calo")
+                        declining = trends_pdf[trends_pdf['Trend_Slope'] < 0].sort_values('Trend_Slope', ascending=True).head(10)
+                        st.dataframe(declining[['Hotel_Name', 'Trend_Slope', 'Review_Count', 'Trend_Description', 'Average_Score_Calculated']], use_container_width=True)
+                        
+                        # Scatter Plot of Slopes vs Average Score
+                        st.subheader("Distribuzione Trend vs Punteggio Medio")
+                        chart = alt.Chart(trends_pdf).mark_circle(size=60).encode(
+                            x=alt.X('Average_Score_Calculated', title='Punteggio Medio Calcolato'),
+                            y=alt.Y('Trend_Slope', title='Trend (Slope)'),
+                            color='Trend_Description',
+                            tooltip=['Hotel_Name', 'Trend_Slope', 'Review_Count']
+                        ).interactive()
+                        st.altair_chart(chart, use_container_width=True)
+                        
+                    else:
+                        st.warning("Nessun trend calcolato. Verifica i dati.")
 
         # Query 1: Top Hotels
         elif query_options[selected_query] == "top_hotels":
