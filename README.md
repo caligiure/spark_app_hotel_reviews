@@ -26,9 +26,9 @@ lng: longitudine
 
 ## Prerequisiti
 
-1.  **Python** (installato)
-2.  **Java JDK** (installato)
-3.  **PySpark, Pandas, Streamlit** (installato via `pip install pyspark`)
+1.  **Python 3.11** (testato con 3.11.9)
+2.  **Java JDK**
+3.  **pip install pyspark pandas scikit-learn numpy streamlit altair**
 4.  **Winutils** (Necessario su Windows)
 
 ### Configurazione Winutils (IMPORTANTE)

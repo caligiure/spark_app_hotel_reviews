@@ -1,5 +1,11 @@
 from pyspark.sql import SparkSession
 from pyspark.sql.functions import col, avg, count, desc
+import sys
+import os
+
+# Fix per "Python worker failed to connect back"
+os.environ['PYSPARK_PYTHON'] = sys.executable
+os.environ['PYSPARK_DRIVER_PYTHON'] = sys.executable
 
 def create_spark_session(app_name="HotelReviewsAnalysis"):
     """Initialize SparkSession"""

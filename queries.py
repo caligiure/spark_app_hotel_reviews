@@ -60,10 +60,7 @@ def get_top_hotels_by_nation(df, n=10):
     # 2. per Average_Score (in ordine decrescente)
     return result
 
-
-
-
-def analyze_review_trends(df):
+def analyze_review_trends(df, min_number_of_reviews = 30):
     """
     Analizza il trend temporale dei punteggi delle recensioni per ogni hotel.
     Utilizza una Pandas UDF per calcolare la regressione lineare su ogni gruppo.
@@ -73,8 +70,8 @@ def analyze_review_trends(df):
     # pdf è un pandas DataFrame contenente le recensioni di UN solo hotel
     # Nota: è importante definire una funzione Pandas, che sarà eseguita con applyInPandas,
     # in modo tale che Spark possa mantenere il parallelismo e non dover eseguire la UDF in un unico worker.
-    def calculate_trend(pdf): 
-        if pdf.empty or len(pdf) < 2: # Non abbastanza dati per un trend, restituisce un DataFrame vuoto
+    def calculate_trend(pdf):
+        if pdf.empty or len(pdf) < min_number_of_reviews: # Non abbastanza dati per un trend, restituisce un DataFrame vuoto
             return pd.DataFrame()
             
         # 1. Ordina per data (fondamentale per il trend temporale) ed elimina le righe con data non valida
@@ -82,7 +79,7 @@ def analyze_review_trends(df):
         pdf['Review_Date'] = pd.to_datetime(pdf['Review_Date'], format='%m/%d/%Y', errors='coerce')
         pdf = pdf.dropna(subset=['Review_Date'])
         pdf = pdf.sort_values('Review_Date')
-        if len(pdf) < 2: # Non abbastanza dati per un trend, restituisce un DataFrame vuoto
+        if len(pdf) < min_number_of_reviews: # Non abbastanza dati per un trend, restituisce un DataFrame vuoto
             return pd.DataFrame()
 
         # 2. Prepara dati per regressione
@@ -106,8 +103,9 @@ def analyze_review_trends(df):
             "Trend_Slope": [float(slope)],
             "Review_Count": [len(pdf)],
             "Average_Score_Calculated": [float(y.mean())],
-            "Min_Date": [pdf['Review_Date'].min()],
-            "Max_Date": [pdf['Review_Date'].max()]
+            "Average_Score": [pdf['Average_Score'].iloc[0]],
+            "First_Review_Date": [pdf['Review_Date'].min()],
+            "Last_Review_Date": [pdf['Review_Date'].max()]
         })
 
     # Schema di output della UDF
@@ -116,14 +114,16 @@ def analyze_review_trends(df):
         StructField("Trend_Slope", FloatType(), True),
         StructField("Review_Count", IntegerType(), True),
         StructField("Average_Score_Calculated", FloatType(), True),
-        StructField("Min_Date", DateType(), True),
-        StructField("Max_Date", DateType(), True)
+        StructField("Average_Score", FloatType(), True),
+        StructField("First_Review_Date", DateType(), True),
+        StructField("Last_Review_Date", DateType(), True)
     ])
 
-    # Riduce il dataset su cui lavorare, selezionando solo le 3 colonne strettamente necessarie, 
+    # Riduce il dataset su cui lavorare, selezionando solo le colonne strettamente necessarie 
+    # e filtrando gli hotel con almeno {min_number_of_reviews} recensioni,
     # per evitare di passare colonne superflue e non utilizzate alla UDF Pandas.
     # Nota: spostare dati da Spark (JVM) a Pandas (Python) è costoso, quindi è meglio spostare solo i dati necessari.
-    input_df = df.select("Hotel_Name", "Review_Date", "Reviewer_Score")
+    input_df = df.select("Hotel_Name", "Review_Date", "Reviewer_Score", "Average_Score").filter(F.col("Total_Number_of_Reviews") >= min_number_of_reviews)
 
     # Esecuzione GroupBy + ApplyInPandas
     trends = input_df.groupBy("Hotel_Name").applyInPandas(calculate_trend, schema=schema)
@@ -131,13 +131,5 @@ def analyze_review_trends(df):
     # Per ogni gruppo (Hotel_Name) Spark invia i dati al worker (Python), il quale esegue la UDF Pandas.
     # Spark raccoglie i risultati di tutti questi calcoli paralleli e li unisce in un unico nuovo DataFrame Spark (trends),
     # rispettando la struttura definita in schema.
-    
-    # Aggiunge una colonna "Trend_Description" che spiega l'andamento del trend.
-    trends = trends.withColumn(
-        "Trend_Description",
-        F.when(F.col("Trend_Slope") > 0.0001, "Crescente 📈") # Se slope > 0.0001, trend crescente
-         .when(F.col("Trend_Slope") < -0.0001, "Decrescente 📉") # Se slope < -0.0001, trend decrescente
-         .otherwise("Stabile ➖") # Se slope è tra -0.0001 e 0.0001, trend stabile
-    )
     
     return trends
