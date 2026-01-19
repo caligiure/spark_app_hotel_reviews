@@ -9,13 +9,11 @@ def get_top_hotels_by_nation(df, n=10):
     """
     Raggruppa gli hotel per nazione e trova gli n migliori per ogni nazione
     basandosi su un criterio di punteggio (default: Average_Score).
-    
     Args:
         df: DataFrame PySpark con i dati degli hotel
         n: Numero di hotel da mostrare per ogni nazione
-        
     Returns:
-        DataFrame con le colonne selezionate e i top n hotel per nazione
+        DataFrame PySpark con le colonne selezionate e i top n hotel per nazione
     """
     # 1. Deduplicazione per Hotel: Conserviamo una sola riga per hotel
     # Nota: Hotel_Address, Average_Score e Total_Number_of_Reviews sono costanti per lo stesso Hotel_Name
@@ -64,6 +62,11 @@ def analyze_review_trends(df, min_number_of_reviews = 30):
     """
     Analizza il trend temporale dei punteggi delle recensioni per ogni hotel.
     Utilizza una Pandas UDF per calcolare la regressione lineare su ogni gruppo.
+    Args:
+        df: DataFrame PySpark con i dati degli hotel
+        min_number_of_reviews: Numero minimo di recensioni per hotel
+    Returns:
+        DataFrame PySpark con le colonne selezionate e i top n hotel per nazione
     """
 
     # UDF Pandas che verrà eseguita su ogni gruppo (Hotel)
@@ -103,7 +106,7 @@ def analyze_review_trends(df, min_number_of_reviews = 30):
             "Trend_Slope": [float(slope)],
             "Review_Count": [len(pdf)],
             "Average_Score_Calculated": [float(y.mean())],
-            "Average_Score": [pdf['Average_Score'].iloc[0]],
+            "Average_Score": [round(float(pdf['Average_Score'].iloc[0]), 1)],
             "First_Review_Date": [pdf['Review_Date'].min()],
             "Last_Review_Date": [pdf['Review_Date'].max()]
         })
@@ -131,5 +134,46 @@ def analyze_review_trends(df, min_number_of_reviews = 30):
     # Per ogni gruppo (Hotel_Name) Spark invia i dati al worker (Python), il quale esegue la UDF Pandas.
     # Spark raccoglie i risultati di tutti questi calcoli paralleli e li unisce in un unico nuovo DataFrame Spark (trends),
     # rispettando la struttura definita in schema.
-    
     return trends
+
+def analyze_tag_influence(df, min_count=50):
+    """
+    Analizza l'influenza dei tag sul punteggio delle recensioni (MapReduce style).
+    
+    Map: Esplode la lista dei tag (stringa) in righe singole.
+    Reduce: Raggruppa per tag e calcola statistiche (media voto, conteggio).
+    
+    Args:
+        df: DataFrame PySpark con i dati degli hotel
+        min_count: Numero minimo di recensioni per tag
+    Returns:
+        DataFrame PySpark con le colonne selezionate e i top n hotel per nazione
+    """
+    # 1. Pulizia e Map (Explode)
+    # Il campo Tags è una stringa tipo "[' Leisure trip ', ' Couple ', ...]"
+    # Dobbiamo rimuovere [ ' ] e splittare per virgola
+    clean_tags = F.regexp_replace(F.col("Tags"), "[\\[\\]']", "") # Restituisce "Leisure trip, Couple, ..."
+    splitted_tags = F.split(clean_tags, ",") # Restituisce ["Leisure trip", "Couple", ...]
+    # Split e Explode (Map Phase)
+    exploded_df = df.withColumn("Tag", F.explode(splitted_tags))
+    
+    # Trim degli spazi bianchi dai tag generati
+    exploded_df = exploded_df.withColumn("Tag", F.trim(F.col("Tag")))
+    
+    # 2. Reduce (GroupBy + Aggregations)
+    tag_stats = exploded_df.groupBy("Tag").agg(
+        F.count("Reviewer_Score").alias("Count"),
+        F.avg("Reviewer_Score").alias("Average_Score"),
+        F.stddev("Reviewer_Score").alias("StdDev_Score")
+    )
+    
+    # 3. Post-Processing & Filtering
+    # Calcoliamo la media globale per confronto
+    global_avg = df.select(F.avg("Reviewer_Score")).first()[0]
+    
+    # Filtriamo tag poco frequenti e calcoliamo l'impatto (Differenza dalla media globale)
+    final_stats = tag_stats.filter(F.col("Count") >= min_count) \
+        .withColumn("Impact", F.col("Average_Score") - global_avg) \
+        .withColumn("Global_Average", F.lit(global_avg))
+        
+    return final_stats.orderBy(F.col("Impact").desc())

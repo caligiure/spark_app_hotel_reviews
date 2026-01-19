@@ -6,23 +6,23 @@ Questo progetto mostra come utilizzare PySpark per analizzare un dataset di rece
 
 ### Campi del dataset
 
-Hotel_Address: indirizzo dell'hotel
-Additional_Number_of_Scoring: numero di valutazioni aggiuntive
-Review_Date: data della recensione
-Average_Score: punteggio medio
-Hotel_Name: nome dell'hotel
-Reviewer_Nationality: nazionalità del recensore
-Negative_Review: recensione negativa
-Review_Total_Negative_Word_Counts: numero di parole negative nella recensione
-Total_Number_of_Reviews: numero totale di recensioni
-Positive_Review: recensione positiva
-Review_Total_Positive_Word_Counts: numero di parole positive nella recensione
-Total_Number_of_Reviews_Reviewer_Has_Given: numero totale di recensioni che ha dato il recensore
-Reviewer_Score: punteggio del recensore
-Tags: tag associati alla recensione
-days_since_review: giorni trascorsi dalla recensione
-lat: latitudine
-lng: longitudine
+* Hotel_Address: indirizzo dell'hotel
+* Additional_Number_of_Scoring: numero di valutazioni aggiuntive
+* Review_Date: data della recensione
+* Average_Score: punteggio medio calcolato su tutte le recensioni ricevute dall'hotel nell'ultimo anno
+* Hotel_Name: nome dell'hotel
+* Reviewer_Nationality: nazionalità del recensore
+* Negative_Review: recensione negativa (se non presente il campo contiene "No Negative")
+* Review_Total_Negative_Word_Counts: numero di parole negative nella recensione
+* Total_Number_of_Reviews: numero totale di recensioni dell'hotel
+* Positive_Review: recensione positiva (se non presente il campo contiene "No Positive")
+* Review_Total_Positive_Word_Counts: numero di parole positive nella recensione
+* Total_Number_of_Reviews_Reviewer_Has_Given: numero totale di recensioni che ha dato il recensore
+* Reviewer_Score: punteggio che il recensore ha dato all'hotel
+* Tags: tag associati alla recensione
+* days_since_review: giorni trascorsi fra la pubblicazione e lo scraping della recensione
+* lat: latitudine dell'hotel
+* lng: longitudine dell'hotel
 
 ## Prerequisiti
 

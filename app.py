@@ -9,7 +9,7 @@ import streamlit as st
 import pandas as pd
 import altair as alt
 from main import create_spark_session, load_data, get_top_hotels
-from queries import get_top_hotels_by_nation, analyze_review_trends
+from queries import get_top_hotels_by_nation, analyze_review_trends, analyze_tag_influence
 from ml_model import train_satisfaction_model
 from sentiment_analysis import (
     fetch_hotel_reviews, 
@@ -50,9 +50,10 @@ try:
         query_options = {
             "Migliori Hotel per Nazione": "top_hotels_by_nation",
             "Trend Recensioni (Time Series)": "review_trends",
+            "Analisi Influenza Tag (MapReduce)": "tag_influence",
             "Top Hotels (Avg Score)": "top_hotels",
             "Stima Soddisfazione (ML)": "ml_satisfaction",
-            "Sentiment Analysis (Local LLM)": "sentiment_analysis"
+            "Sentiment Analysis (Local LLM)": "sentiment_analysis",
         }
         selected_query = st.sidebar.radio("Scegli la query da eseguire:", list(query_options.keys()))
         st.divider()
@@ -83,12 +84,26 @@ try:
 
         # Query: Trend Recensioni
         elif query_options[selected_query] == "review_trends":
-            st.write("Questa analisi calcola il **trend temporale** dei punteggi per ogni hotel utilizzando la **Regressione Lineare**.")
-            st.write("Viene identificato se la reputazione dell'hotel è in crescita (📈), decrescita (📉) o stabile (➖).")
-            st.write("Nota: Vengono esclusi gli hotel con meno di 30 recensioni.")
+            st.markdown("""
+            Questa analisi calcola il **trend temporale** dei punteggi per ogni hotel utilizzando la **Regressione Lineare**.
             
+            Viene identificato se la **reputazione** dell'hotel è:
+            *   **📈 In crescita**: quando la pendenza della retta di regressione lineare è positiva.
+            *   **📉 In decrescita**: quando la pendenza della retta di regressione lineare è negativa.
+            *   **➖ Stabile**: quando la pendenza della retta di regressione lineare è zero.
+
+            **Legenda Campi:**
+            *   `Trend_Slope`: Pendenza della retta di regressione lineare.
+            *   `Review_Count`: Numero totale di recensioni dell'hotel.
+            *   `Average_Score_Calculated`: Punteggio medio calcolato sulle recensioni presenti nel dataset.
+            *   `Average_Score`: Punteggio medio calcolato su tutte le recensioni ricevute dall'hotel nell'ultimo anno (anche quelle che non sono presenti nel dataset).
+            *   `First_Review_Date`: Data della prima recensione dell'hotel.
+            *   `Last_Review_Date`: Data della ultima recensione dell'hotel.
+            """)
+            st.info("**Nota**: Il calcolo del trend viene effettuato tenendo conto solo delle recensioni presenti nel dataset che hanno una data valida. Inoltre, vengono esclusi gli hotel con meno di 30 recensioni valide.")
             if st.button("Calcola Trend per tutti gli Hotel"):
                 with st.spinner("Calcolo regressione lineare per ogni hotel in corso... (potrebbe richiedere qualche secondo)"):
+                    # Esegue la query (da queries.py)
                     trends_df = analyze_review_trends(df, min_number_of_reviews = 30)
                     # Conversione in Pandas per la visualizzazione
                     trends_pdf = trends_df.toPandas()
@@ -101,19 +116,28 @@ try:
                         st.subheader("📉 Top 10 Hotel in Calo")
                         declining = trends_pdf[trends_pdf['Trend_Slope'] < 0].sort_values('Trend_Slope', ascending=True).head(10)
                         st.dataframe(declining[['Hotel_Name', 'Trend_Slope', 'Review_Count', 'Average_Score_Calculated', 'Average_Score', 'First_Review_Date', 'Last_Review_Date']], width='stretch')
-                        # Scatter Plot of Slopes vs Average Score
+                        # Scatter Plot (altair chart) per Trend vs Punteggio Medio
                         st.subheader("Distribuzione Trend vs Punteggio Medio")
+                        st.markdown("""
+                        In questo grafico è possibile osservare la distribuzione dei trend in relazione al punteggio medio degli hotel.
+                        * **^ In alto** si trovano gli hotel con trend positivo (in crescita)
+                        * **v In basso** gli hotel con trend negativo (in calo).
+                        * **-> A destra** si trovano gli hotel con punteggio medio alto
+                        * **<- A sinistra** gli hotel con punteggio medio basso.
+                        * **Gli hotel con punteggio medio alto e trend positivo sono i migliori hotel.**  
+                        """)
+                        st.info("Nota: cliccando su un punto del grafico è possibile visualizzare le informazioni relative all'hotel.")
                         chart = alt.Chart(trends_pdf).mark_circle(size=60).encode(
-                            x=alt.X('Average_Score_Calculated', title='Punteggio Medio Calcolato'),
+                            x=alt.X('Average_Score_Calculated', title='Punteggio Medio Calcolato sulle recensioni testuali'),
                             y=alt.Y('Trend_Slope', title='Trend (Slope)'),
                             color=alt.Color('Trend_Slope', scale=alt.Scale(scheme='redblue')),
-                            tooltip=['Hotel_Name', 'Trend_Slope', 'Review_Count']
+                            tooltip=['Hotel_Name', 'Trend_Slope', 'Review_Count', 'Average_Score_Calculated', 'Average_Score', 'First_Review_Date', 'Last_Review_Date']
                         ).interactive()
                         st.altair_chart(chart, width='stretch')
                     else:
                         st.warning("Nessun trend calcolato. Verifica i dati.")
 
-        # Query 1: Top Hotels
+        # Query: Top Hotels
         elif query_options[selected_query] == "top_hotels":
             num_results = st.number_input("Seleziona il numero di risultati da visualizzare:", min_value=1, max_value=100, value=10)
             if st.button("Trova i migliori hotel"):
@@ -136,7 +160,7 @@ try:
                 else:
                     st.error("Inserisci un numero valido di risultati.")
 
-        # Query 2: ML Satisfaction
+        # Query: ML Satisfaction
         elif query_options[selected_query] == "ml_satisfaction":
             if st.button("Addestra Modello e Mostra Coefficienti"):
                 st.info("Addestramento modello di regressione lineare in corso...")
@@ -171,8 +195,63 @@ try:
                     
                     
                 st.success("Modello addestrato!")
+
+        # Query: Tag Influence
+        elif query_options[selected_query] == "tag_influence":
+            st.markdown("""
+            ### Analisi Influenza dei Tag
+            Questa query utilizza un approccio **MapReduce** per determinare quali tag ("Couple", "Leisure trip", ecc.) sono associati a voti più alti o più bassi.
             
-        # Query 3: Sentiment Analysis
+            1.  **Map**: Esplode la lista dei tag di ogni recensione.
+            2.  **Reduce**: Aggrega per tag calcolando voto medio e frequenza.
+            3.  **Analisi**: Calcola l'`Impact` come differenza dal voto medio globale.
+            """)
+            
+            min_count = st.slider("Minimo numero di occorrenze per tag", 10, 1000, 100, step=10)
+            
+            if st.button("Analizza Influenza Tag"):
+                with st.spinner(f"Analisi MapReduce sui Tag (filtrando < {min_count} occorrenze)..."):
+                    tag_df = analyze_tag_influence(df, min_count=min_count)
+                    tag_pdf = tag_df.toPandas()
+                    
+                    if not tag_pdf.empty:
+                        global_avg = tag_pdf['Global_Average'].iloc[0]
+                        st.metric("Media Globale Voti", f"{global_avg:.2f}")
+                        
+                        col1, col2 = st.columns(2)
+                        
+                        with col1:
+                            st.subheader("👍 Top 10 Tag Positivi")
+                            st.write("Tag associati a voti *superiori* alla media.")
+                            pos_tags = tag_pdf[tag_pdf['Impact'] > 0].head(10)
+                            st.dataframe(pos_tags[['Tag', 'Average_Score', 'Count', 'Impact']].style.format("{:.2f}", subset=['Average_Score', 'Impact']), use_container_width=True)
+                            
+                        with col2:
+                            st.subheader("👎 Top 10 Tag Negativi")
+                            st.write("Tag associati a voti *inferiori* alla media.")
+                            neg_tags = tag_pdf[tag_pdf['Impact'] < 0].sort_values('Impact').head(10)
+                            st.dataframe(neg_tags[['Tag', 'Average_Score', 'Count', 'Impact']].style.format("{:.2f}", subset=['Average_Score', 'Impact']), use_container_width=True)
+                        
+                        st.subheader("Grafico Impatto Tag")
+                        # Uniamo i top positivi e negativi per il grafico
+                        chart_data = pd.concat([pos_tags, neg_tags])
+                        
+                        chart = alt.Chart(chart_data).mark_bar().encode(
+                            x=alt.X('Impact:Q', title='Impatto sul Voto (Rispetto alla Media)'),
+                            y=alt.Y('Tag:N', sort='-x', title='Tag'),
+                            color=alt.condition(
+                                alt.datum.Impact > 0,
+                                alt.value("green"),
+                                alt.value("red")
+                            ),
+                            tooltip=['Tag', 'Average_Score', 'Count', 'Impact']
+                        ).interactive()
+                        st.altair_chart(chart, use_container_width=True)
+                        
+                    else:
+                        st.warning("Nessun tag trovato con i filtri selezionati.")
+            
+        # Query: Sentiment Analysis
         elif query_options[selected_query] == "sentiment_analysis":
             st.info("Questa funzionalità richiede **Ollama** installato in locale.")
             # --- Configurazione ---
