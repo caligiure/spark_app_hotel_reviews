@@ -201,3 +201,44 @@ def analyze_tag_influence(df, min_count=50):
     )
         
     return final_stats.orderBy(F.col("Weighted_Impact").desc())
+
+def analyze_nationality_bias(df, min_reviews=50):
+    """
+    Analizza il bias dei recensori in base alla nazionalità.
+    Raggruppa per nazionalità e calcola statistiche su voti e lunghezza recensioni.
+    
+    Args:
+        df: DataFrame PySpark
+        min_reviews: Minimo numero di recensioni per considerare una nazionalità
+        
+    Returns:
+        DataFrame con statistiche per nazionalità
+    """
+    # 1. Map (riga df -> riga clean_df) e Clean (Rimuoviamo spazi extra e filtriamo eventuali null)
+    clean_df = df.withColumn("Reviewer_Nationality", F.trim(F.col("Reviewer_Nationality"))) \
+                 .filter(F.col("Reviewer_Nationality").isNotNull()) \
+                 .filter(F.col("Reviewer_Nationality") != "")
+
+    # 2. Reduce (GroupBy + Aggregations) (gruppo di righe di clean_df -> riga nation_stats)
+    nation_stats = clean_df.groupBy("Reviewer_Nationality").agg(
+        F.count("Reviewer_Score").alias("Count"), # conta le occorrenze di ogni nazionalità
+        F.avg("Reviewer_Score").alias("Average_Score"), # calcola la media dei voti per ogni nazionalità
+        F.avg("Review_Total_Positive_Word_Counts").alias("Avg_Positive_Words"), # calcola la media delle parole positive per ogni nazionalità
+        F.avg("Review_Total_Negative_Word_Counts").alias("Avg_Negative_Words") # calcola la media delle parole negative per ogni nazionalità
+    )
+    
+    # 3. Post-Processing & Metrics
+    global_avg = df.select(F.avg("Reviewer_Score")).first()[0] # Prendiamo la media globale per confronto
+    final_stats = nation_stats.filter(F.col("Count") >= min_reviews) # Filtro per rilevanza statistica (num minimo di recensioni)
+    # Calcolo metriche derivate (Deviazione = scostamento dalla media globale, ratio = rapporto tra positive e negative)
+    final_stats = final_stats.withColumn("Global_Average", F.lit(global_avg)) \
+        .withColumn("Score_Deviation", F.col("Average_Score") - F.col("Global_Average")) \
+        .withColumn("Total_Words_Avg", F.col("Avg_Positive_Words") + F.col("Avg_Negative_Words")) \
+        .withColumn("Sentiment_Ratio", 
+                    F.when(F.col("Total_Words_Avg") > 0, # evita divisione per zero
+                           F.col("Avg_Positive_Words") / F.col("Total_Words_Avg"))
+                    .otherwise(0.0)
+        )
+    
+    # Ordiniamo per deviazione (dal più generoso al più critico)
+    return final_stats.orderBy(F.col("Score_Deviation").desc())

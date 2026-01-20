@@ -9,7 +9,7 @@ import streamlit as st
 import pandas as pd
 import altair as alt
 from main import create_spark_session, load_data, get_top_hotels
-from queries import get_top_hotels_by_nation, analyze_review_trends, analyze_tag_influence
+from queries import get_top_hotels_by_nation, analyze_review_trends, analyze_tag_influence, analyze_nationality_bias
 from ml_model import train_satisfaction_model
 from sentiment_analysis import (
     fetch_hotel_reviews, 
@@ -19,7 +19,6 @@ from sentiment_analysis import (
     get_topic_score_correlation,
     get_discrepancies
 )
-
 
 # Configurazione della pagina
 st.set_page_config(page_title="Hotel Reviews Analytics", layout="wide")
@@ -51,6 +50,7 @@ try:
             "Migliori Hotel per Nazione": "top_hotels_by_nation",
             "Trend Recensioni (Time Series)": "review_trends",
             "Analisi Influenza Tag (MapReduce)": "tag_influence",
+            "Analisi Bias Nazionalità": "nationality_bias",
             "Top Hotels (Avg Score)": "top_hotels",
             "Stima Soddisfazione (ML)": "ml_satisfaction",
             "Sentiment Analysis (Local LLM)": "sentiment_analysis",
@@ -183,7 +183,7 @@ try:
                         * **Asse Y (Reliability)**: Quanto è "solido" il dato (Alto=Molto affidabile, Basso=Incerto).
                         * **Obiettivo**: Cerca i tag negli angoli in alto a destra (vincenti sicuri) e in alto a sinistra (problemi certi).
                         """)
-                        
+                        st.info("Nota: cliccando su un punto del grafico è possibile visualizzare le informazioni relative al tag.")
                         chart = alt.Chart(tag_pdf).mark_circle(size=60).encode(
                             x=alt.X('Impact:Q', title='Impatto (Voto Tag - Media Globale)'),
                             y=alt.Y('Reliability_Index:Q', title='Indice di Affidabilità'),
@@ -194,6 +194,54 @@ try:
                         
                     else:
                         st.warning("Nessun tag trovato con i filtri selezionati.")
+
+        # Query: Nationality Bias
+        elif query_options[selected_query] == "nationality_bias":
+            st.markdown("""
+            ### Analisi Bias per Nazionalità
+            Questa query cerca di identificare se esistono nazionalità tendenzialmente più generose o severe nei voti.
+            Inoltre, calcola un **Sentiment Ratio** basato sul rapporto tra parole positive e totali usate nelle recensioni.
+            
+            *   **Reviewer Nationality**: Nazionalità del recensore.
+            *   **Average Score**: Voto medio assegnato da recensori di stessa nazionalità.
+            *   **Count**: Numero di recensioni per nazionalità.
+            *   **Score Deviation**: Differenza tra il voto medio della nazionalità e la media globale dei voti di tutte le recensioni.
+            *   **Sentiment Ratio**: percentuale di parole positive sul totale delle parole usate nelle recensioni di stessa nazionalità (indicatore di "positività" nel testo).
+            *   **Total Words Avg**: Lunghezza media delle recensioni di stessa nazionalità (quanto sono "verbosi").
+            """)
+            
+            min_revs_nat = st.slider("Minimo numero recensioni per nazionalità", 10, 500, 20, step=10)
+            
+            if st.button("Analizza Bias Nazionalità"):
+                with st.spinner("Raggruppamento per nazionalità e calcolo statistiche..."):
+                    nat_df = analyze_nationality_bias(df, min_reviews=min_revs_nat) # da queries.py
+                    nat_pdf = nat_df.toPandas() # dataframe da Spark a Pandas per visualizzazione
+                    
+                    if not nat_pdf.empty:
+                        global_avg = nat_pdf['Global_Average'].iloc[0] # legge la media globale dei voti dalla prima riga (è un valore costante)
+                        st.metric("Media Globale Voti", f"{global_avg:.2f}")
+                        
+                        st.subheader("😤 I Più Critici (Voti Bassi)")
+                        critics = nat_pdf.sort_values("Score_Deviation", ascending=True).head(10) # ordinamento crescente
+                        st.dataframe(critics[['Reviewer_Nationality', 'Average_Score', 'Count', 'Score_Deviation', 'Sentiment_Ratio', 'Total_Words_Avg']].style.format("{:.2f}", subset=['Average_Score', 'Score_Deviation', 'Sentiment_Ratio', 'Total_Words_Avg']), width='stretch')
+                        
+                        st.subheader("🥰 I Più Generosi (Voti Alti)")
+                        generous = nat_pdf.sort_values("Score_Deviation", ascending=False).head(10) # ordinamento decrescente
+                        st.dataframe(generous[['Reviewer_Nationality', 'Average_Score', 'Count', 'Score_Deviation', 'Sentiment_Ratio', 'Total_Words_Avg']].style.format("{:.2f}", subset=['Average_Score', 'Score_Deviation', 'Sentiment_Ratio', 'Total_Words_Avg']), width='stretch')
+                        
+                        st.subheader("Correlazione Voto vs Positività Testo (Corenza delle recensioni per nazionalità)")
+                        st.write("Chi dà voti alti scrive davvero cose positive? (In alto a destra = Sì, In basso a destra = No)")
+                        st.info("Nota: cliccando su un punto del grafico è possibile visualizzare le informazioni relative alla nazionalità.")
+                        chart = alt.Chart(nat_pdf).mark_circle().encode(
+                            x=alt.X('Average_Score:Q', scale=alt.Scale(domain=[nat_pdf['Average_Score'].min() * 0.95, 10]), title="Voto Medio"),
+                            y=alt.Y('Sentiment_Ratio:Q', scale=alt.Scale(domain=[nat_pdf['Sentiment_Ratio'].min() * 0.9, nat_pdf['Sentiment_Ratio'].max() * 1.05]), title="Ratio Parole Positive (Pos/(Total_Words))"),
+                            size=alt.Size('Count:Q', legend=None),
+                            color=alt.Color('Score_Deviation:Q', scale=alt.Scale(scheme='redblue')),
+                            tooltip=['Reviewer_Nationality', 'Average_Score', 'Count', 'Score_Deviation', 'Sentiment_Ratio', 'Total_Words_Avg']
+                        ).interactive()
+                        st.altair_chart(chart, width='stretch')
+                    else:
+                        st.warning("Nessuna nazionalità soddisfa i criteri di filtro.")
 
         # Query: Top Hotels
         elif query_options[selected_query] == "top_hotels":
