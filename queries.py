@@ -180,7 +180,24 @@ def analyze_tag_influence(df, min_count=50):
     # Filtriamo tag poco frequenti e calcoliamo l'impatto (Differenza dalla media globale)
     final_stats = tag_stats.filter(F.col("Count") >= min_count) \
         .withColumn("Impact", F.col("Average_Score") - global_avg) \
-        .withColumn("Global_Average", F.lit(global_avg)) # F.lit() permette di creare una colonna con valore costante
+        .withColumn("Global_Average", F.lit(global_avg))
+
+    # --- Calcolo Reliability Index ---
+    # Formula euristica: Reliability = (1 / (StdDev + 0.1)) * log(Count)
+    # - 1/StdDev premia la stabilità dei voti: dev. std. bassa (voti concentrati attorno alla media) -> reliability alta
+    # - +0.1 serve a evitare divisioni per zero e a moderare l'effetto di StdDev bassissime.
+    # - log(Count) premia la frequenza dei tag (più un tag è frequente, più è affidabile)
+    # - il logaritmo è usato per ridurre l'effetto di Count molto alto (es. log(10) ≈ 1, log(100) ≈ 2, log(1000) ≈ 3)
+    final_stats = final_stats.withColumn(
+        "Reliability_Index",
+        (1 / (F.col("StdDev_Score") + 0.1)) * F.log(F.col("Count"))
+    )
     
-    # 4. Sorting
-    return final_stats.orderBy(F.col("Impact").desc())
+    # --- Calcolo Impatto Pesato ---
+    # Weighted_Impact = Impact * Reliability_Index
+    final_stats = final_stats.withColumn(
+        "Weighted_Impact",
+        F.col("Impact") * F.col("Reliability_Index")
+    )
+        
+    return final_stats.orderBy(F.col("Weighted_Impact").desc())

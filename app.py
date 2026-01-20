@@ -141,9 +141,8 @@ try:
         elif query_options[selected_query] == "tag_influence":
             st.markdown("""
             ### Analisi Influenza dei Tag
-            Questa query utilizza un approccio **MapReduce** per determinare quali tag ("Couple", "Leisure trip", ecc.) sono associati a voti più alti o più bassi.
-            Inoltre, valuta l'impatto di ogni tag rispetto alla media globale dei voti.
-
+            Questa query utilizza un approccio **MapReduce** per analizzare l'impatto dei tag, determinando quali tag ("Couple", "Leisure trip", ecc.) sono associati a voti più alti o più bassi.
+            
             1.  **Map**: Esplode la lista dei tag di ogni recensione.
             2.  **Reduce**: Aggrega per tag calcolando voto medio, frequenza e deviazione standard.
             3.  **Analisi di ogni tag**:
@@ -154,6 +153,8 @@ try:
                     * < 1.0: **Molto Attendibile**. C'è forte consenso (quasi tutte le recensioni hanno lo stesso punteggio).
                     * 1.0 - 2.0: **Normale**. C'è una naturale variabilità umana, ma il trend è chiaro
                     * \> 2.0: **Disperso/Controverso**. C'è grande variabilità umana (le recensioni hanno voti molto diversi).
+                * **Reliability Index**: Indice euristico `(1/StdDev) * log(Count)` che premia coerenza e frequenza.
+                * **Weighted Impact**: `Impact * Reliability Index`.
             """)
             
             min_count = st.slider("Minimo numero di occorrenze per tag", 10, 1000, 50, step=10)
@@ -166,29 +167,28 @@ try:
                         global_avg = tag_pdf['Global_Average'].iloc[0] # legge la media globale dei voti dalla prima riga (è un valore costante)
                         st.metric("Media Globale Voti (calcolata su tutte le recensioni):", f"{global_avg:.2f}")
                         
-                        st.subheader("👍 Top 10 Tag Positivi")
-                        st.write("Tag associati a voti *superiori* alla media.")
+                        st.subheader("👍 Top 10 Tag Positivi (per Weighted Impact)")
+                        st.write("Tag più affidabili che alzano il voto.")
                         pos_tags = tag_pdf[tag_pdf['Impact'] > 0].head(10)
-                        st.dataframe(pos_tags[['Single_Tag', 'Average_Score', 'Count', 'Impact', 'StdDev_Score']].style.format("{:.2f}", subset=['Average_Score', 'Impact', 'StdDev_Score']), width='stretch')
+                        st.dataframe(pos_tags[['Single_Tag', 'Average_Score', 'Count', 'Impact', 'Reliability_Index', 'Weighted_Impact']].style.format("{:.2f}", subset=['Average_Score', 'Impact', 'Reliability_Index', 'Weighted_Impact']), width='stretch')
                         
-                        st.subheader("👎 Top 10 Tag Negativi")
-                        st.write("Tag associati a voti *inferiori* alla media.")
-                        neg_tags = tag_pdf[tag_pdf['Impact'] < 0].sort_values('Impact').head(10)
-                        st.dataframe(neg_tags[['Single_Tag', 'Average_Score', 'Count', 'Impact', 'StdDev_Score']].style.format("{:.2f}", subset=['Average_Score', 'Impact', 'StdDev_Score']), width='stretch')
+                        st.subheader("👎 Top 10 Tag Negativi (per Weighted Impact)")
+                        st.write("Tag più affidabili che abbassano il voto.")
+                        neg_tags = tag_pdf[tag_pdf['Impact'] < 0].sort_values('Weighted_Impact', ascending=True).head(10)
+                        st.dataframe(neg_tags[['Single_Tag', 'Average_Score', 'Count', 'Impact', 'Reliability_Index', 'Weighted_Impact']].style.format("{:.2f}", subset=['Average_Score', 'Impact', 'Reliability_Index', 'Weighted_Impact']), width='stretch')
                         
-                        st.subheader("Grafico Impatto Tag")
-                        # Uniamo i top positivi e negativi per il grafico
-                        chart_data = pd.concat([pos_tags, neg_tags])
+                        st.subheader("Grafico: Affidabilità vs Impatto")
+                        st.markdown("""
+                        * **Asse X (Impact)**: Quanto il tag sposta il voto (Destra=Positivo, Sinistra=Negativo).
+                        * **Asse Y (Reliability)**: Quanto è "solido" il dato (Alto=Molto affidabile, Basso=Incerto).
+                        * **Obiettivo**: Cerca i tag negli angoli in alto a destra (vincenti sicuri) e in alto a sinistra (problemi certi).
+                        """)
                         
-                        chart = alt.Chart(chart_data).mark_bar().encode(
-                            x=alt.X('Impact:Q', title='Impatto sul Voto (Rispetto alla Media)'),
-                            y=alt.Y('Single_Tag:N', sort='-x', title='Tag'),
-                            color=alt.condition(
-                                alt.datum.Impact > 0,
-                                alt.value("green"),
-                                alt.value("red")
-                            ),
-                            tooltip=['Single_Tag', 'Average_Score', 'Count', 'Impact']
+                        chart = alt.Chart(tag_pdf).mark_circle(size=60).encode(
+                            x=alt.X('Impact:Q', title='Impatto (Voto Tag - Media Globale)'),
+                            y=alt.Y('Reliability_Index:Q', title='Indice di Affidabilità'),
+                            color=alt.Color('Average_Score:Q', scale=alt.Scale(scheme='viridis'), title='Voto Medio'),
+                            tooltip=['Single_Tag', 'Average_Score', 'Count', 'Impact', 'Reliability_Index', 'Weighted_Impact', 'StdDev_Score']
                         ).interactive()
                         st.altair_chart(chart, width='stretch')
                         
