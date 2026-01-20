@@ -137,6 +137,64 @@ try:
                     else:
                         st.warning("Nessun trend calcolato. Verifica i dati.")
 
+        # Query: Tag Influence
+        elif query_options[selected_query] == "tag_influence":
+            st.markdown("""
+            ### Analisi Influenza dei Tag
+            Questa query utilizza un approccio **MapReduce** per determinare quali tag ("Couple", "Leisure trip", ecc.) sono associati a voti più alti o più bassi.
+            Inoltre, valuta l'impatto di ogni tag rispetto alla media globale dei voti.
+
+            1.  **Map**: Esplode la lista dei tag di ogni recensione.
+            2.  **Reduce**: Aggrega per tag calcolando voto medio, frequenza e deviazione standard.
+            3.  **Analisi di ogni tag**:
+                * **Average_Score**: punteggio medio delle recensioni associate al tag.
+                * **Count**: frequenza del tag.
+                * **Impact**: differenza tra il punteggio medio del tag e il voto medio globale (calcolato su tutte le recensioni).
+                * **StdDev_Score**: deviazione standard dei punteggi del tag:
+                    * < 1.0: **Molto Attendibile**. C'è forte consenso (quasi tutte le recensioni hanno lo stesso punteggio).
+                    * 1.0 - 2.0: **Normale**. C'è una naturale variabilità umana, ma il trend è chiaro
+                    * \> 2.0: **Disperso/Controverso**. C'è grande variabilità umana (le recensioni hanno voti molto diversi).
+            """)
+            
+            min_count = st.slider("Minimo numero di occorrenze per tag", 10, 1000, 50, step=10)
+            
+            if st.button("Analizza Influenza Tag"):
+                with st.spinner(f"Analisi MapReduce sui Tag (filtrando < {min_count} occorrenze)..."):
+                    tag_df = analyze_tag_influence(df, min_count=min_count) # da queries.py
+                    tag_pdf = tag_df.toPandas() # dataframe da Spark a Pandas per visualizzazione
+                    if not tag_pdf.empty:
+                        global_avg = tag_pdf['Global_Average'].iloc[0] # legge la media globale dei voti dalla prima riga (è un valore costante)
+                        st.metric("Media Globale Voti (calcolata su tutte le recensioni):", f"{global_avg:.2f}")
+                        
+                        st.subheader("👍 Top 10 Tag Positivi")
+                        st.write("Tag associati a voti *superiori* alla media.")
+                        pos_tags = tag_pdf[tag_pdf['Impact'] > 0].head(10)
+                        st.dataframe(pos_tags[['Single_Tag', 'Average_Score', 'Count', 'Impact', 'StdDev_Score']].style.format("{:.2f}", subset=['Average_Score', 'Impact', 'StdDev_Score']), width='stretch')
+                        
+                        st.subheader("👎 Top 10 Tag Negativi")
+                        st.write("Tag associati a voti *inferiori* alla media.")
+                        neg_tags = tag_pdf[tag_pdf['Impact'] < 0].sort_values('Impact').head(10)
+                        st.dataframe(neg_tags[['Single_Tag', 'Average_Score', 'Count', 'Impact', 'StdDev_Score']].style.format("{:.2f}", subset=['Average_Score', 'Impact', 'StdDev_Score']), width='stretch')
+                        
+                        st.subheader("Grafico Impatto Tag")
+                        # Uniamo i top positivi e negativi per il grafico
+                        chart_data = pd.concat([pos_tags, neg_tags])
+                        
+                        chart = alt.Chart(chart_data).mark_bar().encode(
+                            x=alt.X('Impact:Q', title='Impatto sul Voto (Rispetto alla Media)'),
+                            y=alt.Y('Single_Tag:N', sort='-x', title='Tag'),
+                            color=alt.condition(
+                                alt.datum.Impact > 0,
+                                alt.value("green"),
+                                alt.value("red")
+                            ),
+                            tooltip=['Single_Tag', 'Average_Score', 'Count', 'Impact']
+                        ).interactive()
+                        st.altair_chart(chart, width='stretch')
+                        
+                    else:
+                        st.warning("Nessun tag trovato con i filtri selezionati.")
+
         # Query: Top Hotels
         elif query_options[selected_query] == "top_hotels":
             num_results = st.number_input("Seleziona il numero di risultati da visualizzare:", min_value=1, max_value=100, value=10)
@@ -196,61 +254,6 @@ try:
                     
                 st.success("Modello addestrato!")
 
-        # Query: Tag Influence
-        elif query_options[selected_query] == "tag_influence":
-            st.markdown("""
-            ### Analisi Influenza dei Tag
-            Questa query utilizza un approccio **MapReduce** per determinare quali tag ("Couple", "Leisure trip", ecc.) sono associati a voti più alti o più bassi.
-            
-            1.  **Map**: Esplode la lista dei tag di ogni recensione.
-            2.  **Reduce**: Aggrega per tag calcolando voto medio e frequenza.
-            3.  **Analisi**: Calcola l'`Impact` come differenza dal voto medio globale.
-            """)
-            
-            min_count = st.slider("Minimo numero di occorrenze per tag", 10, 1000, 100, step=10)
-            
-            if st.button("Analizza Influenza Tag"):
-                with st.spinner(f"Analisi MapReduce sui Tag (filtrando < {min_count} occorrenze)..."):
-                    tag_df = analyze_tag_influence(df, min_count=min_count)
-                    tag_pdf = tag_df.toPandas()
-                    
-                    if not tag_pdf.empty:
-                        global_avg = tag_pdf['Global_Average'].iloc[0]
-                        st.metric("Media Globale Voti", f"{global_avg:.2f}")
-                        
-                        col1, col2 = st.columns(2)
-                        
-                        with col1:
-                            st.subheader("👍 Top 10 Tag Positivi")
-                            st.write("Tag associati a voti *superiori* alla media.")
-                            pos_tags = tag_pdf[tag_pdf['Impact'] > 0].head(10)
-                            st.dataframe(pos_tags[['Tag', 'Average_Score', 'Count', 'Impact']].style.format("{:.2f}", subset=['Average_Score', 'Impact']), use_container_width=True)
-                            
-                        with col2:
-                            st.subheader("👎 Top 10 Tag Negativi")
-                            st.write("Tag associati a voti *inferiori* alla media.")
-                            neg_tags = tag_pdf[tag_pdf['Impact'] < 0].sort_values('Impact').head(10)
-                            st.dataframe(neg_tags[['Tag', 'Average_Score', 'Count', 'Impact']].style.format("{:.2f}", subset=['Average_Score', 'Impact']), use_container_width=True)
-                        
-                        st.subheader("Grafico Impatto Tag")
-                        # Uniamo i top positivi e negativi per il grafico
-                        chart_data = pd.concat([pos_tags, neg_tags])
-                        
-                        chart = alt.Chart(chart_data).mark_bar().encode(
-                            x=alt.X('Impact:Q', title='Impatto sul Voto (Rispetto alla Media)'),
-                            y=alt.Y('Tag:N', sort='-x', title='Tag'),
-                            color=alt.condition(
-                                alt.datum.Impact > 0,
-                                alt.value("green"),
-                                alt.value("red")
-                            ),
-                            tooltip=['Tag', 'Average_Score', 'Count', 'Impact']
-                        ).interactive()
-                        st.altair_chart(chart, use_container_width=True)
-                        
-                    else:
-                        st.warning("Nessun tag trovato con i filtri selezionati.")
-            
         # Query: Sentiment Analysis
         elif query_options[selected_query] == "sentiment_analysis":
             st.info("Questa funzionalità richiede **Ollama** installato in locale.")

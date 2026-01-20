@@ -150,30 +150,37 @@ def analyze_tag_influence(df, min_count=50):
         DataFrame PySpark con le colonne selezionate e i top n hotel per nazione
     """
     # 1. Pulizia e Map (Explode)
-    # Il campo Tags è una stringa tipo "[' Leisure trip ', ' Couple ', ...]"
-    # Dobbiamo rimuovere [ ' ] e splittare per virgola
-    clean_tags = F.regexp_replace(F.col("Tags"), "[\\[\\]']", "") # Restituisce "Leisure trip, Couple, ..."
-    splitted_tags = F.split(clean_tags, ",") # Restituisce ["Leisure trip", "Couple", ...]
-    # Split e Explode (Map Phase)
-    exploded_df = df.withColumn("Tag", F.explode(splitted_tags))
-    
+    # Il campo Tags è una stringa tipo "[' Leisure trip ', ' Couple ', ...]". Dobbiamo rimuovere [ ' ] e splittare per virgola
+    clean_tags = F.regexp_replace(F.col("Tags"), "[\\[\\]']", "") # Trasformazione LAZY: restituisce "Leisure trip, Couple, ..."
+    splitted_tags = F.split(clean_tags, ",") # Trasformazione LAZY: restituisce ["Leisure trip", "Couple", ...]
+    # Explode (Map Phase):
+    # aggiunge una nuova colonna Single_Tag e per calcolarne il valore usa explode(splitted_tags)
+    # explode(splitted_tags), crea una nuova riga per ogni elemento dell'array splitted_tags
+    # Esempio: se una riga ha Tags = "[Leisure Trip, Couple]", explode crea due righe: una con Single_Tag = 'Leisure Trip' e una con Single_Tag = 'Couple'
+    # (gli altri campi vengono duplicati dalla riga originale)
+    # Quindi si comporta come una FLATMAP: da 1 riga ne crea N (dove N è il numero di tag)
+    exploded_df = df.withColumn("Single_Tag", F.explode(splitted_tags))
     # Trim degli spazi bianchi dai tag generati
-    exploded_df = exploded_df.withColumn("Tag", F.trim(F.col("Tag")))
+    exploded_df = exploded_df.withColumn("Single_Tag", F.trim(F.col("Single_Tag")))
     
     # 2. Reduce (GroupBy + Aggregations)
-    tag_stats = exploded_df.groupBy("Tag").agg(
-        F.count("Reviewer_Score").alias("Count"),
-        F.avg("Reviewer_Score").alias("Average_Score"),
-        F.stddev("Reviewer_Score").alias("StdDev_Score")
-    )
+    # Raggruppa per tag e calcola statistiche (media voto, conteggio).
+    tag_stats = exploded_df.groupBy("Single_Tag").agg(
+        F.count("Reviewer_Score").alias("Count"), # conta le occorrenze di ogni tag
+        F.avg("Reviewer_Score").alias("Average_Score"), # calcola la media dei voti per ogni tag
+        F.stddev("Reviewer_Score").alias("StdDev_Score") # calcola la deviazione standard dei voti per ogni tag (dev. std. bassa = voti concentrati attorno alla media, alta = voti dispersi)
+    )                                                    # se la deviazione standard è alta, significa che i voti sono molto dispersi e non sono affidabili.
     
     # 3. Post-Processing & Filtering
     # Calcoliamo la media globale per confronto
     global_avg = df.select(F.avg("Reviewer_Score")).first()[0]
+    # Questo valore serve come punto di riferimento (baseline): se un Tag ha una media di 9.0 e la media globale è 8.5, 
+    # allora quel Tag ha un "impatto positivo" (+0.5). Se invece la media del Tag fosse 8.0, avrebbe un "impatto negativo" (-0.5).
     
     # Filtriamo tag poco frequenti e calcoliamo l'impatto (Differenza dalla media globale)
     final_stats = tag_stats.filter(F.col("Count") >= min_count) \
         .withColumn("Impact", F.col("Average_Score") - global_avg) \
-        .withColumn("Global_Average", F.lit(global_avg))
-        
+        .withColumn("Global_Average", F.lit(global_avg)) # F.lit() permette di creare una colonna con valore costante
+    
+    # 4. Sorting
     return final_stats.orderBy(F.col("Impact").desc())
