@@ -20,8 +20,14 @@ def get_top_hotels_by_nation(df, n=10):
     """
     # 1. Deduplicazione per Hotel: Conserviamo una sola riga per hotel
     # Nota: Hotel_Address, Average_Score e Total_Number_of_Reviews sono costanti per lo stesso Hotel_Name
-    unique_hotels_df = df.select("Hotel_Name", "Hotel_Address", "Average_Score", "Total_Number_of_Reviews") \
-                         .dropDuplicates(["Hotel_Name"])
+    unique_hotels_df = df.select(
+        "Hotel_Name", 
+        "Hotel_Address", 
+        "Average_Score", 
+        "Total_Number_of_Reviews",
+        F.when(F.col("lat") == "NA", None).otherwise(F.col("lat")).cast("double").alias("lat"),
+        F.when(F.col("lng") == "NA", None).otherwise(F.col("lng")).cast("double").alias("lng")
+    ).dropDuplicates(["Hotel_Name"])
 
     # 2. Estrazione della Nazione (la nazione è l'ultima parola dell'indirizzo)
     df_with_nation = unique_hotels_df.withColumn("Nation_Raw", F.element_at(F.split(F.col("Hotel_Address"), " "), -1))
@@ -54,7 +60,9 @@ def get_top_hotels_by_nation(df, n=10):
         "Hotel_Name",
         "Average_Score",
         "Total_Number_of_Reviews",
-        "Hotel_Address"
+        "Hotel_Address",
+        "lat",
+        "lng"
     ).orderBy("Nation", F.col("Average_Score").desc())
     # Nota: orderBy() impone questo ordinamento: 
     # 1. per Nation (in ordine alfabetico crescente)

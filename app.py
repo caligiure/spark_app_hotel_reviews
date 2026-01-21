@@ -537,6 +537,48 @@ try:
                             tooltip=['Nation', 'Hotel_Name', 'Average_Score']
                         ).interactive()
                         st.altair_chart(chart, width='stretch')
+
+                        # --- Mappa Geografica ---
+                        st.subheader("🗺️ Mappa dei Migliori Hotel")
+                        # Filtra hotel con coordinate valide (dropna su lat/lng)
+                        map_df = nation_pdf.dropna(subset=['lat', 'lng'])
+                        
+                        if not map_df.empty:
+                            st.write(f"Visualizzazione geografica di {len(map_df)} hotel (quelli con coordinate valide).")
+                            
+                            # View State centrato sulla media delle coordinate
+                            view_state = pdk.ViewState(
+                                latitude=map_df["lat"].mean(),
+                                longitude=map_df["lng"].mean(),
+                                zoom=3,
+                                pitch=0,
+                            )
+                            
+                            # Layer Scatterplot
+                            layer = pdk.Layer(
+                                "ScatterplotLayer",
+                                data=map_df,
+                                get_position='[lng, lat]',
+                                get_color='[255, 215, 0, 200]', # Oro/Giallo
+                                get_radius=30000, # 30km di raggio per essere visibili
+                                pickable=True,
+                                opacity=0.8,
+                                filled=True,
+                                radius_min_pixels=5,
+                                radius_max_pixels=50,
+                            )
+                            
+                            st.pydeck_chart(pdk.Deck(
+                                map_style=None,
+                                initial_view_state=view_state,
+                                layers=[layer],
+                                tooltip={
+                                    "html": "<b>{Hotel_Name}</b><br/>{Nation}<br/>Score: {Average_Score}",
+                                    "style": {"color": "white"}
+                                }
+                            ))
+                        else:
+                            st.warning("Nessuna coordinata valida trovata per gli hotel selezionati.")
         
         # Query: Top Hotels
         elif query_options[selected_query] == "top_hotels":
