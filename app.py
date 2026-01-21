@@ -10,6 +10,7 @@ import pandas as pd
 import altair as alt
 import pydeck as pdk
 from pyspark.sql import SparkSession
+import time
 from main import get_top_hotels
 from queries import get_top_hotels_by_nation, analyze_review_trends, analyze_tag_influence, analyze_nationality_bias, analyze_local_competitiveness, segment_hotels_kmeans
 from ml_model import train_satisfaction_model
@@ -326,12 +327,12 @@ try:
             st.write("**Feature Selezionate:**")
             c1, c2, c3, c4, c5 = st.columns(5)
             use_score = c1.checkbox("Punteggio (Avg Score)", value=True)
-            use_popularity = c2.checkbox("Popolarità (Num Reviews)", value=True)
-            use_verbosity = c3.checkbox("Verbosità (Lunghezza Rec.)", value=False)
-            use_location = c4.checkbox("Posizione (Lat/Lng)", value=False)
-            use_nationality = c5.checkbox("Profilo Nazionalità", value=False, help="Includi la % di provenienza dei clienti (Top 10 nazioni)")
+            use_popularity = c2.checkbox("Popolarità (Num. Recensioni)", value=True)
+            use_verbosity = c3.checkbox("Verbosità (Lunghezza Recensioni)", value=True)
+            use_location = c4.checkbox("Posizione (Lat/Lng)", value=True)
+            use_nationality = c5.checkbox("Profilo Nazionalità", value=True, help="Includi la % di provenienza dei clienti (Top 10 nazioni)")
 
-            if "clustering_pdf" not in st.session_state:
+            if "clustering_pdf" not in st.session_state: # per non ricalcolare il dataframe ogni volta che si aggiorna la pagina
                 st.session_state["clustering_pdf"] = None
 
             if st.button("Esegui Segmentazione"):
@@ -352,7 +353,11 @@ try:
                         # Altrimenti PyArrow/Streamlit crashano perché non sanno serializzare i DenseVector
                         pdf = clustered_df.drop("features", "features_raw").toPandas()
                         st.session_state["clustering_pdf"] = pdf
-                        st.success(f"Analisi completata! Hotel suddivisi in {k_clusters} cluster.")
+                        # Mostriamo messaggio di successo temporaneo
+                        msg_placeholder = st.empty()
+                        msg_placeholder.success(f"Analisi completata! Hotel suddivisi in {k_clusters} cluster.")
+                        time.sleep(3)
+                        msg_placeholder.empty()
             
             # Se abbiamo risultati in memoria (o appena calcolati), mostriamo la visualizzazione
             if st.session_state["clustering_pdf"] is not None:
@@ -361,45 +366,66 @@ try:
                 # --- 1. Statistiche Cluster ---
                 st.subheader("📊 Analisi dei Gruppi Identificati")
                 
-                # Calcoliamo la media delle colonne numeriche per ogni cluster per interpretare il risultato
-                # Selezioniamo solo colonne numeriche rilevanti per la visualizzazione
+                # Seleziona solo colonne numeriche rilevanti per la visualizzazione (e controlla se le colonne opzionali sono presenti)
                 numeric_cols = ["Avg_Score", "Total_Reviews"]
-                # Cerchiamo di capire quali colonne opzionali sono presenti nel df risultante
                 if "Avg_Pos_Words" in pdf.columns: numeric_cols.extend(["Avg_Pos_Words", "Avg_Neg_Words"])
                 if "Lat" in pdf.columns: numeric_cols.extend(["Lat", "Lng"])
                 
+                # Calcola la media delle colonne numeriche per ogni cluster per interpretare il risultato
                 cluster_stats = pdf.groupby("prediction")[numeric_cols].mean().reset_index()
-                cluster_counts = pdf['prediction'].value_counts().reset_index()
-                cluster_counts.columns = ['prediction', 'Count']
+                cluster_counts = pdf['prediction'].value_counts().reset_index() # conta quanti hotel ci sono in ogni cluster
+                cluster_counts.columns = ['prediction', 'Count'] # rinomina la colonna prediction in Count
                 
-                summary = pd.merge(cluster_stats, cluster_counts, on="prediction")
-                summary['Cluster Name'] = summary['prediction'].apply(lambda x: f"Cluster {x}")
+                summary = pd.merge(cluster_stats, cluster_counts, on="prediction") # merge delle due tabelle
+                summary['Cluster Name'] = summary['prediction'].apply(lambda x: f"Cluster {x}") # rinomina la colonna prediction in Cluster Name
                 
+                # Filtriamo le colonne da visualizzare
+                desired_cols = ["Cluster Name", "Count", "Avg_Score", "Total_Reviews", "Avg_Pos_Words", "Avg_Neg_Words"]
+                final_cols = [c for c in desired_cols if c in summary.columns]
+
+                # Palette fissa (RGB) per max 10 cluster
+                CLUSTER_COLORS = [
+                    [255, 0, 0, 160],   # Rosso
+                    [0, 255, 0, 160],   # Verde
+                    [0, 0, 255, 160],   # Blu
+                    [255, 165, 0, 160], # Arancione
+                    [128, 0, 128, 160], # Viola
+                    [0, 255, 255, 160], # Ciano
+                    [255, 0, 255, 160], # Magenta
+                    [255, 255, 0, 160], # Giallo
+                    [128, 128, 128, 160], # Grigio
+                    [0, 191, 255, 160]      # Celeste
+                ]
+
+                # Funzione per colorare le celle
+                def color_cluster_name(val):
+                    try:
+                        cluster_id = int(str(val).split(" ")[1])
+                        c = CLUSTER_COLORS[cluster_id % len(CLUSTER_COLORS)]
+                        # CSS rgba usa 0-1 per alpha
+                        return f'background-color: rgba({c[0]}, {c[1]}, {c[2]}, {c[3]/255:.2f}); color: white'
+                    except:
+                        return ''
+
+                # Formattazione colonne
+                format_dict = {
+                    "Total_Reviews": "{:.0f}",
+                    "Count": "{:.0f}",
+                    "Avg_Score": "{:.2f}",
+                    "Avg_Pos_Words": "{:.1f}",
+                    "Avg_Neg_Words": "{:.1f}"
+                }
+
                 # Mostriamo la tabella
-                st.dataframe(summary.style.background_gradient(cmap='Blues', subset=['Count']), width='stretch')
+                st.dataframe(summary[final_cols].style
+                             .background_gradient(cmap='Blues', subset=['Count'])
+                             .map(color_cluster_name, subset=['Cluster Name'])
+                             .format(format_dict), width='stretch')
                 
                 # --- 2. Mappa Geografica (Se attiva Posizione) ---
                 if use_location:
                     st.subheader("🗺️ Distribuzione Geografica Cluster")
-                    st.write("Visualizza come i gruppi sono distribuiti nello spazio.")
-                    
-                    # URL per i dati geografici (Paesi del mondo)
-                    # Usiamo PyDeck per una mappa interattiva vera (Zoom/Pan supportati nativamente)
-                    
-                    # 1. Assegniamo un colore per ogni cluster
-                    # Palette fissa (RGB) per max 10 cluster
-                    CLUSTER_COLORS = [
-                        [255, 0, 0, 160],   # Rosso
-                        [0, 255, 0, 160],   # Verde
-                        [0, 0, 255, 160],   # Blu
-                        [255, 165, 0, 160], # Arancione
-                        [128, 0, 128, 160], # Viola
-                        [0, 255, 255, 160], # Ciano
-                        [255, 0, 255, 160], # Magenta
-                        [255, 255, 0, 160], # Giallo
-                        [128, 128, 128, 160], # Grigio
-                        [0, 0, 0, 160]      # Nero
-                    ]
+                    st.write("Visualizza come i cluster sono distribuiti geograficamente.")
                     
                     # Applichiamo il colore al dataframe Pandas
                     # Creiamo una colonna 'color' contenente la lista [R, G, B, A]
@@ -429,7 +455,7 @@ try:
                     
                     # 4. Render Mappa
                     st.pydeck_chart(pdk.Deck(
-                        map_style=None, # Usa stile default (CartoDB Dark) che non richiede token Mapbox
+                        map_style=None, # Usa stile default (CartoDB Dark)
                         initial_view_state=view_state,
                         layers=[layer],
                         tooltip={
@@ -441,10 +467,9 @@ try:
                 # --- 3. Scatter Plot Interattivo (Performance) ---
                 st.subheader("📍 Esplorazione Performance (Scatter Plot)")
                 
-                # Opzioni assi dinamiche (Escludiamo Lat/Lng che ora hanno la loro mappa)
+                # Opzioni assi dinamiche (Escludiamo Lat/Lng)
                 avail_cols = ["Avg_Score", "Total_Reviews"]
                 if "Avg_Pos_Words" in pdf.columns: avail_cols.extend(["Avg_Pos_Words", "Avg_Neg_Words"])
-                # RIMOSSO: Lat/Lng dagli assi scatter plot
                 
                 ac1, ac2 = st.columns(2)
                 x_axis = ac1.selectbox("Asse X", avail_cols, index=0)
@@ -466,7 +491,8 @@ try:
                     
                     # Recuperiamo le colonne delle nazionalità (tutte quelle non standard)
                     base_cols = ["Hotel_Name", "prediction", "features", "features_raw", 
-                                 "Avg_Score", "Total_Reviews", "Avg_Pos_Words", "Avg_Neg_Words", "Lat", "Lng"]
+                                 "Avg_Score", "Total_Reviews", "Avg_Pos_Words", "Avg_Neg_Words", "Lat", "Lng",
+                                 "color", "lat_rad", "lng_rad", "x", "y", "z"]
                     nat_cols = [c for c in pdf.columns if c not in base_cols]
                     
                     if nat_cols:
