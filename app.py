@@ -12,7 +12,7 @@ import pydeck as pdk
 from pyspark.sql import SparkSession
 import time
 from main import get_top_hotels
-from queries import get_top_hotels_by_nation, analyze_review_trends, analyze_tag_influence, analyze_nationality_bias, analyze_local_competitiveness, segment_hotels_kmeans
+from queries import get_top_hotels_by_nation, analyze_review_trends, analyze_tag_influence, analyze_nationality_bias, analyze_local_competitiveness, segment_hotels_kmeans, compare_local_vs_tourist_reviews
 from ml_model import train_satisfaction_model
 from sentiment_analysis import (
     fetch_hotel_reviews, 
@@ -74,9 +74,10 @@ try:
             "Analisi Competitività Locale": "local_competitiveness",
             "Segmentazione Hotel (K-Means)": "hotel_clustering",
             "Migliori Hotel per Nazione": "top_hotels_by_nation",
+            "Preferenze - Locals vs Tourists": "local_vs_tourist",
             "Top Hotels (Avg Score)": "top_hotels",
             "Stima Soddisfazione (ML)": "ml_satisfaction",
-            "Sentiment Analysis (Local LLM)": "sentiment_analysis"
+            "Sentiment Analysis (Local LLM)": "sentiment_analysis",
         }
         selected_query = st.sidebar.radio("Scegli la query da eseguire:", list(query_options.keys()))
         
@@ -426,7 +427,7 @@ try:
                 if use_location:
                     st.subheader("🗺️ Distribuzione Geografica Cluster")
                     st.write("Visualizza come i cluster sono distribuiti geograficamente.")
-                    
+                    st.info("Nota: cliccando su un punto della mappa è possibile visualizzare le informazioni relative al cluster.")
                     # Applichiamo il colore al dataframe Pandas
                     # Creiamo una colonna 'color' contenente la lista [R, G, B, A]
                     pdf["color"] = pdf["prediction"].apply(lambda pid: CLUSTER_COLORS[pid % len(CLUSTER_COLORS)])
@@ -466,7 +467,7 @@ try:
 
                 # --- 3. Scatter Plot Interattivo (Performance) ---
                 st.subheader("📍 Esplorazione Performance (Scatter Plot)")
-                
+                st.info("Nota: cliccando su un punto del grafico è possibile visualizzare le informazioni relative all'hotel.")
                 # Opzioni assi dinamiche (Escludiamo Lat/Lng)
                 avail_cols = ["Avg_Score", "Total_Reviews"]
                 if "Avg_Pos_Words" in pdf.columns: avail_cols.extend(["Avg_Pos_Words", "Avg_Neg_Words"])
@@ -537,9 +538,10 @@ try:
                             tooltip=['Nation', 'Hotel_Name', 'Average_Score']
                         ).interactive()
                         st.altair_chart(chart, width='stretch')
-
+                        
                         # --- Mappa Geografica ---
                         st.subheader("🗺️ Mappa dei Migliori Hotel")
+                        st.info("Nota: cliccando su un punto della mappa è possibile visualizzare le informazioni relative all'hotel.")
                         # Filtra hotel con coordinate valide (dropna su lat/lng)
                         map_df = nation_pdf.dropna(subset=['lat', 'lng'])
                         
@@ -580,6 +582,65 @@ try:
                         else:
                             st.warning("Nessuna coordinata valida trovata per gli hotel selezionati.")
         
+        # Query: Local vs Tourist
+        elif query_options[selected_query] == "local_vs_tourist":
+            st.markdown("""
+            ##### 🏠 Locals' Favorites vs 📸 Tourist Traps
+            
+            Analizza come cambia la percezione degli hotel tra chi è del posto (Locals) e i turisti internazionali (Tourists).
+            
+            *   **Locals (Recensori Locali)**: Recensori che hanno la stessa nazionalità della nazione in cui si trova l'hotel.
+            *   **Tourists (Recensori Turisti)**: Recensori di nazionalità diversa.
+            
+            **Indicatori:**
+            *   **Local_Avg_Score**: Voto medio dato dai locali.
+            *   **Tourist_Avg_Score**: Voto medio dato dai turisti.
+            *   **Preference_Delta** (`Local - Tourist`): 
+                *   Valori **POSITIVI** (> 0): L'hotel piace più ai Locali (possibile "Gemma Nascosta" o esperienza autentica).
+                *   Valori **NEGATIVI** (< 0): L'hotel piace più ai Turisti (possibile "Tourist Trap" o standard internazionale generico).
+            """)
+            
+            min_revs_group = st.slider("Minimo recensioni per gruppo (Local & Tourist)", 5, 100, 20, help="Esclude hotel con pochi dati per uno dei due gruppi")
+            
+            if st.button("Analizza Preferenze"):
+                with st.spinner("Confronto opinioni Locali vs Turisti..."):
+                    comp_df = compare_local_vs_tourist_reviews(df, min_reviews_per_group=min_revs_group) # da queries.py
+                    comp_pdf = comp_df.toPandas() # da Spark a Pandas per la visualizzazione
+                    
+                    if not comp_pdf.empty:
+                        # KPI Globali (KPI = Key Performance Indicator)
+                        avg_delta = comp_pdf['Preference_Delta'].mean()
+                        st.metric("Discrepanza Media (Local - Tourist)", f"{avg_delta:+.2f}", help="Se positivo, in media i locali sono più generosi dei turisti.")
+                        
+                        st.subheader("🏠 Hotel preferiti dai Locali (Rispetto ai Turisti)")
+                        st.write("Hotel dove il voto dei locali supera di più quello dei turisti.")
+                        local_favs = comp_pdf.sort_values("Preference_Delta", ascending=False).head(10)
+                        st.dataframe(local_favs[['Hotel_Name', 'Hotel_Nation', 'Local_Avg_Score', 'Tourist_Avg_Score', 'Preference_Delta']].style.format("{:.2f}", subset=['Local_Avg_Score', 'Tourist_Avg_Score', 'Preference_Delta']).background_gradient(subset=['Preference_Delta'], cmap='Greens'), width='stretch')
+                            
+                        st.subheader("📸 Hotel preferiti dai Turisti (Rispetto ai Locali)")
+                        st.write("Hotel dove il voto dei turisti supera di più quello dei locali.")
+                        tourist_favs = comp_pdf.sort_values("Preference_Delta", ascending=True).head(10)
+                        st.dataframe(tourist_favs[['Hotel_Name', 'Hotel_Nation', 'Local_Avg_Score', 'Tourist_Avg_Score', 'Preference_Delta']].style.format("{:.2f}", subset=['Local_Avg_Score', 'Tourist_Avg_Score', 'Preference_Delta']).background_gradient(subset=['Preference_Delta'], cmap='Reds_r'), width='stretch')
+                        
+                        st.subheader("Grafico: Discrepanza Voti")
+                        st.write("Confronto diretto tra Voto Local (Y) e Voto Tourist (X).")
+                        st.write("*   **Punti Sopra la diagonale**: Meglio per i Locali.")
+                        st.write("*   **Punti Sotto la diagonale**: Meglio per i Turisti.")
+                        st.info("Nota: cliccando su un punto del grafico è possibile visualizzare le informazioni relative all'hotel.")
+                        # Scatter Plot
+                        chart = alt.Chart(comp_pdf).mark_circle(size=60).encode(
+                            x=alt.X('Tourist_Avg_Score:Q', title='Voto Turisti', scale=alt.Scale(domain=[6, 10])),
+                            y=alt.Y('Local_Avg_Score:Q', title='Voto Locali', scale=alt.Scale(domain=[6, 10])),
+                            color=alt.Color('Preference_Delta:Q', scale=alt.Scale(scheme='redyellowgreen', domainMid=0), title='Delta (Local-Tourist)'),
+                            tooltip=['Hotel_Name', 'Hotel_Nation', 'Local_Avg_Score', 'Tourist_Avg_Score', 'Preference_Delta', 'Local_Count', 'Tourist_Count']
+                        ).interactive()
+                        # Diagonale
+                        line = alt.Chart(pd.DataFrame({'x': [6, 10], 'y': [6, 10]})).mark_line(color='gray', strokeDash=[5, 5]).encode(x='x', y='y')
+                        st.altair_chart(chart + line, width='stretch')
+
+                    else:
+                        st.warning(f"Nessun hotel trovato con almeno {min_revs_group} recensioni per entrambi i gruppi.")
+
         # Query: Top Hotels
         elif query_options[selected_query] == "top_hotels":
             num_results = st.number_input("Seleziona il numero di risultati da visualizzare:", min_value=1, max_value=100, value=10)
@@ -593,6 +654,7 @@ try:
                         st.dataframe(pandas_df, width='stretch')
                         # Visualizzazione con Altair
                         st.write("#### Grafico Hotel per Punteggio Medio")
+                        st.info("Nota: cliccando su un punto del grafico è possibile visualizzare le informazioni relative all'hotel.")
                         chart = alt.Chart(pandas_df).mark_bar().encode(
                             x=alt.X('Average_Score', title='Punteggio Medio', scale=alt.Scale(domain=[pandas_df["Average_Score"].min() - 0.5, 10])),
                             y=alt.Y('Hotel_Name', sort='-x', title='Hotel'),
@@ -726,8 +788,6 @@ try:
                         else:
                             st.info("Nessun dato significativo.")
             else:
-                st.info("👆 Clicca su 'Prepara Dati' per iniziare.")
-
                 st.info("👆 Clicca su 'Prepara Dati' per iniziare.")
 
     else:

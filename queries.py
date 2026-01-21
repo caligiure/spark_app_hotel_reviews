@@ -416,3 +416,67 @@ def segment_hotels_kmeans(df, k=4, use_score=True, use_popularity=True, use_verb
     
     # Ritorniamo il dataframe con le predizioni e tutte le colonne originali
     return predictions
+
+def compare_local_vs_tourist_reviews(df, min_reviews_per_group=10):
+    """
+    Confronta i punteggi dati dai locali (stessa nazione dell'hotel) vs turisti (nazione diversa).
+    Identifica "Local Favorites" (prefeiti dai locali) e "Tourist Traps/Favorites" (preferiti dai turisti).
+    
+    Args:
+        df: DataFrame PySpark
+        min_reviews_per_group: Minimo numero di recensioni sia per gruppo Local che Tourist per includere l'hotel
+        
+    Returns:
+        DataFrame con statistiche comparative (Local_Avg, Tourist_Avg, Delta, ecc.)
+    """
+    
+    # 1. Estrazione Nazione Hotel (Stessa logica di get_top_hotels_by_nation)
+    # Prende l'ultima parola dell'indirizzo
+    df_prep = df.withColumn("Hotel_Nation_Raw", F.element_at(F.split(F.col("Hotel_Address"), " "), -1))
+    
+    # Mapping correzioni (United Kingdom)
+    df_prep = df_prep.withColumn(
+        "Hotel_Nation", 
+        F.when(F.col("Hotel_Nation_Raw") == "Kingdom", "United Kingdom")
+         .otherwise(F.col("Hotel_Nation_Raw"))
+    )
+    
+    # 2. Pulizia Nazionalità Recensore
+    # Trim degli spazi
+    df_prep = df_prep.withColumn("Reviewer_Nationality_Clean", F.trim(F.col("Reviewer_Nationality")))
+    
+    # 3. Classificazione Review (Local vs Tourist)
+    # Local = Recensore della stessa nazione dell'hotel
+    df_tagged = df_prep.withColumn(
+        "Review_Type",
+        F.when(F.col("Hotel_Nation") == F.col("Reviewer_Nationality_Clean"), "Local")
+         .otherwise("Tourist")
+    )
+    
+    # 4. Aggregazione (Pivot)
+    # Raggruppa per Hotel e Nazione, poi fa Pivot su Review_Type 
+    # pivot crea una colonna per ogni Review_Type, cioè una colonna per Local e una per Tourist
+    # a quel punto vengono calcolati i valori medi e conteggi per ogni colonna (mantenendo la divisione in gruppi dello stesso hotel)
+    # La tabella risultante avrà colonne:
+    # Hotel_Name, Hotel_Nation, Local_Avg_Score, Local_Count, Tourist_Avg_Score, Tourist_Count
+    stats = df_tagged.groupBy("Hotel_Name", "Hotel_Nation").pivot("Review_Type", ["Local", "Tourist"]).agg(
+        F.avg("Reviewer_Score").alias("Avg_Score"),
+        F.count("Reviewer_Score").alias("Count")
+    )
+    
+    # 5. Filtri e Metriche Derivate
+    final_df = stats.filter(
+        (F.col("Local_Count") >= min_reviews_per_group) & 
+        (F.col("Tourist_Count") >= min_reviews_per_group)
+    )
+    
+    # Calcolo Delta (Local - Tourist)
+    # > 0: Preferito dai Locali
+    # < 0: Preferito dai Turisti
+    final_df = final_df.withColumn(
+        "Preference_Delta", 
+        F.col("Local_Avg_Score") - F.col("Tourist_Avg_Score")
+    )
+    
+    # Ordinamento per valore assoluto del delta, per vedere le discrepanze più forti, in senso decrescente
+    return final_df.orderBy(F.col("Preference_Delta").desc())
