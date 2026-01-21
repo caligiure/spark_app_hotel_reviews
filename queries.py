@@ -4,6 +4,9 @@ from pyspark.sql.types import StructType, StructField, StringType, FloatType, In
 import pandas as pd
 from sklearn.linear_model import LinearRegression
 import numpy as np
+from pyspark.ml.feature import VectorAssembler, StandardScaler
+from pyspark.ml.clustering import KMeans
+from pyspark.ml import Pipeline
 
 def get_top_hotels_by_nation(df, n=10):
     """
@@ -307,3 +310,101 @@ def analyze_local_competitiveness(df, km_radius=2.0, min_competitors=3):
                                     .otherwise("Underperformer"))
                        
     return final_stats.orderBy(F.col("Score_Delta").desc())
+
+def segment_hotels_kmeans(df, k=4, use_score=True, use_popularity=True, use_verbosity=False, use_location=False, use_nationality=False):
+    """
+    Esegue la segmentazione degli hotel utilizzando K-Means Clustering.
+    Supporta la selezione dinamica delle feature.
+    
+    Args:
+        df: DataFrame PySpark
+        k: Numero di cluster
+        use_score: Considera Average_Score
+        use_popularity: Considera Total_Number_of_Reviews
+        use_verbosity: Considera lunghezza recensioni (Avg_Positive_Words, Avg_Negative_Words)
+        use_location: Considera lat, lng
+        use_nationality: Considera il profilo nazionalità (Top 10 nazioni)
+    """
+    
+    # 1. Base aggregations per Hotel
+    # Raggruppiamo per hotel e calcoliamo le feature di base
+    # Nota: Usiamo first() su colonne costanti per l'hotel (es. lat, lng, average_score)
+    group_cols = [
+        F.first("Average_Score").alias("Avg_Score"),
+        F.first("Total_Number_of_Reviews").alias("Total_Reviews"),
+        F.avg("Review_Total_Positive_Word_Counts").alias("Avg_Pos_Words"),
+        F.avg("Review_Total_Negative_Word_Counts").alias("Avg_Neg_Words"),
+        F.when(F.first("lat") == "NA", None).otherwise(F.first("lat")).cast("double").alias("Lat"),
+        F.when(F.first("lng") == "NA", None).otherwise(F.first("lng")).cast("double").alias("Lng")
+    ]
+    hotel_features = df.groupBy("Hotel_Name").agg(*group_cols)
+    if use_location:
+         hotel_features = hotel_features.dropna(subset=["Lat", "Lng"])
+    
+    # 2. Gestione Feature Opzionali (Nationality Profile)
+    if use_nationality:
+        # Trova le 10 nazioni più frequenti (in tutto il dataset)
+        top_nations = [row['Reviewer_Nationality'] for row in df.groupBy("Reviewer_Nationality").count().orderBy(F.col("count").desc()).limit(10).collect()]
+        # Filtra recensioni per le 10 nazioni più frequenti, raggruppa per hotel, 
+        # poi fa pivot per nazionalità (crea una colonna per ogni nazionalità)
+        # e conta le recensioni per ogni nazionalità
+        nat_counts = df.filter(F.col("Reviewer_Nationality").isin(top_nations)) \
+                       .groupBy("Hotel_Name") \
+                       .pivot("Reviewer_Nationality") \
+                       .count() \
+                       .na.fill(0) # Sostiuisci null con 0
+        
+        # Join con le feature base
+        hotel_features = hotel_features.join(nat_counts, "Hotel_Name", "left").na.fill(0)
+
+    # 3. Assemblaggio Feature Vector
+    input_cols = []
+    if use_score: input_cols.append("Avg_Score")
+    if use_popularity: input_cols.append("Total_Reviews")
+    if use_verbosity: 
+        input_cols.append("Avg_Pos_Words")
+        input_cols.append("Avg_Neg_Words")
+    if use_location:
+         # 3D Coordinate Transformation (Unit Sphere)
+         # Convertiamo Lat/Lng (gradi) in Radianti per usare funzioni trigonometriche
+         # x = cos(lat) * cos(lng)
+         # y = cos(lat) * sin(lng)
+         # z = sin(lat)
+         hotel_features = hotel_features.withColumn("lat_rad", F.radians(F.col("Lat"))) \
+                                        .withColumn("lng_rad", F.radians(F.col("Lng"))) \
+                                        .withColumn("x", F.cos(F.col("lat_rad")) * F.cos(F.col("lng_rad"))) \
+                                        .withColumn("y", F.cos(F.col("lat_rad")) * F.sin(F.col("lng_rad"))) \
+                                        .withColumn("z", F.sin(F.col("lat_rad")))
+         input_cols.append("x")
+         input_cols.append("y")
+         input_cols.append("z")
+    if use_nationality:
+        # Aggiungiamo le colonne delle top nazioni generate dal pivot
+        # Nota: dobbiamo recuperare i nomi delle colonne generate (che sono i nomi delle nazioni)
+        # Le colonne attuali del df meno quelle base conosciute sono quelle delle nazioni
+        base_cols = ["Hotel_Name", "Avg_Score", "Total_Reviews", "Avg_Pos_Words", "Avg_Neg_Words", "Lat", "Lng"]
+        nat_cols = [c for c in hotel_features.columns if c not in base_cols]
+        input_cols.extend(nat_cols)
+    
+    if not input_cols:
+        raise ValueError("Seleziona almeno una feature per il clustering!")
+
+    # Vector Assembler: unisce le colonne in un unico vettore "features_raw"
+    assembler = VectorAssembler(inputCols=input_cols, outputCol="features_raw")
+    
+    # Standard Scaler: normalizza le feature (media 0, dev.std 1) 
+    # Fondamentale per K-Means perchè le distanze euclidee sono sensibili alla scala (es. Reviews=1000 vs Score=10)
+    scaler = StandardScaler(inputCol="features_raw", outputCol="features", withStd=True, withMean=True)
+    
+    # K-Means (# seed=1 per replicabilità)
+    kmeans = KMeans(featuresCol="features", k=k, seed=1)
+    
+    # Pipeline (serve per concatenare le operazioni)
+    pipeline = Pipeline(stages=[assembler, scaler, kmeans])
+    
+    # Fit & Transform
+    model = pipeline.fit(hotel_features) # Fit: apprendimento
+    predictions = model.transform(hotel_features) # Transform: predizione
+    
+    # Ritorniamo il dataframe con le predizioni e tutte le colonne originali
+    return predictions

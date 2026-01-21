@@ -8,9 +8,10 @@ os.environ['PYSPARK_DRIVER_PYTHON'] = sys.executable
 import streamlit as st
 import pandas as pd
 import altair as alt
+import pydeck as pdk
 from pyspark.sql import SparkSession
 from main import get_top_hotels
-from queries import get_top_hotels_by_nation, analyze_review_trends, analyze_tag_influence, analyze_nationality_bias, analyze_local_competitiveness
+from queries import get_top_hotels_by_nation, analyze_review_trends, analyze_tag_influence, analyze_nationality_bias, analyze_local_competitiveness, segment_hotels_kmeans
 from ml_model import train_satisfaction_model
 from sentiment_analysis import (
     fetch_hotel_reviews, 
@@ -67,13 +68,14 @@ try:
         # Selezione Query
         query_options = {
             "Trend Recensioni (Time Series)": "review_trends",
-            "Analisi Influenza Tag (MapReduce)": "tag_influence",
+            "Analisi Influenza Tag": "tag_influence",
             "Analisi Bias Nazionalità": "nationality_bias",
             "Analisi Competitività Locale": "local_competitiveness",
+            "Segmentazione Hotel (K-Means)": "hotel_clustering",
             "Migliori Hotel per Nazione": "top_hotels_by_nation",
             "Top Hotels (Avg Score)": "top_hotels",
             "Stima Soddisfazione (ML)": "ml_satisfaction",
-            "Sentiment Analysis (Local LLM)": "sentiment_analysis",
+            "Sentiment Analysis (Local LLM)": "sentiment_analysis"
         }
         selected_query = st.sidebar.radio("Scegli la query da eseguire:", list(query_options.keys()))
         
@@ -309,6 +311,184 @@ try:
                     else:
                         st.warning(f"Nessun hotel trovato con almeno {min_competitors} competitor nel raggio di {km_radius} km.")
         
+        # Query: Hotel Clustering
+        elif query_options[selected_query] == "hotel_clustering":
+            st.markdown("""
+            🎯 Identifica gruppi di hotel simili in base alle loro caratteristiche. Questo metodo *unsupervised* permette di scoprire pattern nascosti nel dataset.
+            
+            **Scegli le caratteristiche da utilizzare per il raggruppamento:**
+            """)
+            
+            col1, col2 = st.columns(2)
+            with col1:
+                k_clusters = st.slider("Numero di Cluster (gruppi)", 2, 10, 4)
+                
+            st.write("**Feature Selezionate:**")
+            c1, c2, c3, c4, c5 = st.columns(5)
+            use_score = c1.checkbox("Punteggio (Avg Score)", value=True)
+            use_popularity = c2.checkbox("Popolarità (Num Reviews)", value=True)
+            use_verbosity = c3.checkbox("Verbosità (Lunghezza Rec.)", value=False)
+            use_location = c4.checkbox("Posizione (Lat/Lng)", value=False)
+            use_nationality = c5.checkbox("Profilo Nazionalità", value=False, help="Includi la % di provenienza dei clienti (Top 10 nazioni)")
+
+            if "clustering_pdf" not in st.session_state:
+                st.session_state["clustering_pdf"] = None
+
+            if st.button("Esegui Segmentazione"):
+                if not any([use_score, use_popularity, use_verbosity, use_location, use_nationality]):
+                    st.error("Seleziona almeno una feature!")
+                else:
+                    with st.spinner(f"Addestramento modello K-Means (k={k_clusters}) su Spark..."):
+                        clustered_df = segment_hotels_kmeans(
+                            df, 
+                            k=k_clusters,
+                            use_score=use_score,
+                            use_popularity=use_popularity,
+                            use_verbosity=use_verbosity,
+                            use_location=use_location,
+                            use_nationality=use_nationality
+                        )
+                        # Rimuoviamo le colonne vettoriali di Spark ML (features, features_raw) prima di convertire in Pandas
+                        # Altrimenti PyArrow/Streamlit crashano perché non sanno serializzare i DenseVector
+                        pdf = clustered_df.drop("features", "features_raw").toPandas()
+                        st.session_state["clustering_pdf"] = pdf
+                        st.success(f"Analisi completata! Hotel suddivisi in {k_clusters} cluster.")
+            
+            # Se abbiamo risultati in memoria (o appena calcolati), mostriamo la visualizzazione
+            if st.session_state["clustering_pdf"] is not None:
+                pdf = st.session_state["clustering_pdf"]
+                
+                # --- 1. Statistiche Cluster ---
+                st.subheader("📊 Analisi dei Gruppi Identificati")
+                
+                # Calcoliamo la media delle colonne numeriche per ogni cluster per interpretare il risultato
+                # Selezioniamo solo colonne numeriche rilevanti per la visualizzazione
+                numeric_cols = ["Avg_Score", "Total_Reviews"]
+                # Cerchiamo di capire quali colonne opzionali sono presenti nel df risultante
+                if "Avg_Pos_Words" in pdf.columns: numeric_cols.extend(["Avg_Pos_Words", "Avg_Neg_Words"])
+                if "Lat" in pdf.columns: numeric_cols.extend(["Lat", "Lng"])
+                
+                cluster_stats = pdf.groupby("prediction")[numeric_cols].mean().reset_index()
+                cluster_counts = pdf['prediction'].value_counts().reset_index()
+                cluster_counts.columns = ['prediction', 'Count']
+                
+                summary = pd.merge(cluster_stats, cluster_counts, on="prediction")
+                summary['Cluster Name'] = summary['prediction'].apply(lambda x: f"Cluster {x}")
+                
+                # Mostriamo la tabella
+                st.dataframe(summary.style.background_gradient(cmap='Blues', subset=['Count']), width='stretch')
+                
+                # --- 2. Mappa Geografica (Se attiva Posizione) ---
+                if use_location:
+                    st.subheader("🗺️ Distribuzione Geografica Cluster")
+                    st.write("Visualizza come i gruppi sono distribuiti nello spazio.")
+                    
+                    # URL per i dati geografici (Paesi del mondo)
+                    # Usiamo PyDeck per una mappa interattiva vera (Zoom/Pan supportati nativamente)
+                    
+                    # 1. Assegniamo un colore per ogni cluster
+                    # Palette fissa (RGB) per max 10 cluster
+                    CLUSTER_COLORS = [
+                        [255, 0, 0, 160],   # Rosso
+                        [0, 255, 0, 160],   # Verde
+                        [0, 0, 255, 160],   # Blu
+                        [255, 165, 0, 160], # Arancione
+                        [128, 0, 128, 160], # Viola
+                        [0, 255, 255, 160], # Ciano
+                        [255, 0, 255, 160], # Magenta
+                        [255, 255, 0, 160], # Giallo
+                        [128, 128, 128, 160], # Grigio
+                        [0, 0, 0, 160]      # Nero
+                    ]
+                    
+                    # Applichiamo il colore al dataframe Pandas
+                    # Creiamo una colonna 'color' contenente la lista [R, G, B, A]
+                    pdf["color"] = pdf["prediction"].apply(lambda pid: CLUSTER_COLORS[pid % len(CLUSTER_COLORS)])
+                    
+                    # 2. Configurazione View State (Dove guardare all'inizio)
+                    view_state = pdk.ViewState(
+                        latitude=pdf["Lat"].mean(),
+                        longitude=pdf["Lng"].mean(),
+                        zoom=4,
+                        pitch=0,
+                    )
+                    
+                    # 3. Configurazione Layer (Scatterplot)
+                    layer = pdk.Layer(
+                        "ScatterplotLayer",
+                        data=pdf,
+                        get_position='[Lng, Lat]',
+                        get_color='color',
+                        get_radius=10000, # Raggio in metri (10km per essere visibili a livello continentale)
+                        pickable=True,    # Permette di cliccare/hover
+                        opacity=0.8,
+                        filled=True,
+                        radius_min_pixels=5,
+                        radius_max_pixels=50,
+                    )
+                    
+                    # 4. Render Mappa
+                    st.pydeck_chart(pdk.Deck(
+                        map_style=None, # Usa stile default (CartoDB Dark) che non richiede token Mapbox
+                        initial_view_state=view_state,
+                        layers=[layer],
+                        tooltip={
+                            "html": "<b>Hotel:</b> {Hotel_Name}<br/><b>Cluster:</b> {prediction}<br/><b>Score:</b> {Avg_Score}",
+                            "style": {"color": "white"}
+                        }
+                    ))
+
+                # --- 3. Scatter Plot Interattivo (Performance) ---
+                st.subheader("📍 Esplorazione Performance (Scatter Plot)")
+                
+                # Opzioni assi dinamiche (Escludiamo Lat/Lng che ora hanno la loro mappa)
+                avail_cols = ["Avg_Score", "Total_Reviews"]
+                if "Avg_Pos_Words" in pdf.columns: avail_cols.extend(["Avg_Pos_Words", "Avg_Neg_Words"])
+                # RIMOSSO: Lat/Lng dagli assi scatter plot
+                
+                ac1, ac2 = st.columns(2)
+                x_axis = ac1.selectbox("Asse X", avail_cols, index=0)
+                y_axis = ac2.selectbox("Asse Y", avail_cols, index=1 if len(avail_cols) > 1 else 0)
+                
+                chart = alt.Chart(pdf).mark_circle(size=60).encode(
+                    x=alt.X(x_axis, scale=alt.Scale(zero=False)),
+                    y=alt.Y(y_axis, scale=alt.Scale(zero=False)),
+                    color=alt.Color('prediction:N', title='Cluster', scale=alt.Scale(scheme='category10')),
+                    tooltip=['Hotel_Name', 'prediction', 'Avg_Score', 'Total_Reviews']
+                ).interactive()
+                
+                st.altair_chart(chart, width='stretch')
+                
+                # --- 4. Analisi Nazionalità (Se attivata) ---
+                if use_nationality:
+                    st.subheader("🌍 Composizione Etnica per Cluster")
+                    st.write("Come si distribuiscono le nazionalità nei vari gruppi?")
+                    
+                    # Recuperiamo le colonne delle nazionalità (tutte quelle non standard)
+                    base_cols = ["Hotel_Name", "prediction", "features", "features_raw", 
+                                 "Avg_Score", "Total_Reviews", "Avg_Pos_Words", "Avg_Neg_Words", "Lat", "Lng"]
+                    nat_cols = [c for c in pdf.columns if c not in base_cols]
+                    
+                    if nat_cols:
+                        # Conversione esplicita a numerico per evitare errori di tipo 'object' (dovuti forse agli spazi nei nomi colonne)
+                        for c in nat_cols:
+                            pdf[c] = pd.to_numeric(pdf[c], errors='coerce').fillna(0)
+                            
+                        # Calcoliamo la media di ogni nazionalità per cluster
+                        nat_summary = pdf.groupby("prediction")[nat_cols].mean().reset_index()
+                        # Melt per visualizzazione (Cluster, Nation, Percentage)
+                        nat_melted = nat_summary.melt(id_vars="prediction", var_name="Nation", value_vars=nat_cols, value_name="Avg_Reviews_Count")
+                        
+                        # Grafico Stacked Bar
+                        nat_chart = alt.Chart(nat_melted).mark_bar().encode(
+                            x=alt.X('prediction:N', title='Cluster'),
+                            y=alt.Y('Avg_Reviews_Count:Q', stack='normalize', title='Distribuzione Nazionalità'),
+                            color=alt.Color('Nation:N', scale=alt.Scale(scheme='tableau20')),
+                            tooltip=['prediction', 'Nation', 'Avg_Reviews_Count']
+                        ).properties(height=400)
+                        
+                        st.altair_chart(nat_chart, width='stretch')
+
         # Query: Top Hotels by Nation
         elif query_options[selected_query] == "top_hotels_by_nation":
             st.write("Questa query consente di individuare i **migliori hotel per ogni nazione**. Il criterio di ranking utilizzato è il **punteggio medio** ottenuto nelle recensioni dei clienti, inoltre in caso di parità si predilige l'hotel con il **numero totale di recensioni** più elevato.")
@@ -478,6 +658,8 @@ try:
                         else:
                             st.info("Nessun dato significativo.")
             else:
+                st.info("👆 Clicca su 'Prepara Dati' per iniziare.")
+
                 st.info("👆 Clicca su 'Prepara Dati' per iniziare.")
 
     else:

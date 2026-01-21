@@ -28,7 +28,7 @@ Questo progetto mostra come utilizzare PySpark per analizzare un dataset di rece
 
 1.  **Python 3.11** (testato con 3.11.9)
 2.  **Java JDK**
-3.  **pip install pyspark pandas scikit-learn numpy streamlit altair**
+3.  **pip install pyspark pandas scikit-learn numpy streamlit altair matplotlib**
 4.  **Winutils** (Necessario su Windows)
 
 ### Configurazione Winutils (IMPORTANTE)
