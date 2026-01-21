@@ -242,3 +242,68 @@ def analyze_nationality_bias(df, min_reviews=50):
     
     # Ordiniamo per deviazione (dal più generoso al più critico)
     return final_stats.orderBy(F.col("Score_Deviation").desc())
+
+def analyze_local_competitiveness(df, km_radius=2.0, min_competitors=3):
+    """
+    Analizza la competitività locale (Geospatial Analysis).
+    Confronta il punteggio di un hotel con la media dei suoi vicini entro km_radius.
+    Identifica "Local Gems" (superano i vicini) e "Underperformers" (sotto la media di zona).
+    
+    Args:
+        df: DataFrame PySpark
+        km_radius: Raggio di ricerca in km
+        min_competitors: Numero minimo di competitor nel raggio per essere inclusi
+    """
+    # 1. Preparazione dati (Deduplicazione per hotel)
+    hotels = df.select(
+        "Hotel_Name", 
+        F.col("Average_Score").cast("float"), 
+        F.when(F.col("lat") == "NA", None).otherwise(F.col("lat")).cast("double").alias("lat"), 
+        F.when(F.col("lng") == "NA", None).otherwise(F.col("lng")).cast("double").alias("lng")
+    ).dropDuplicates(["Hotel_Name"]).dropna(subset=["lat", "lng"])
+
+    # 2. Self-Join, calcolo delle distanze, filter per distanza < radius
+
+    # Rinominiamo per distinguere Hotel A (Target) e Hotel B (Neighbor)
+    left = hotels.alias("a")
+    right = hotels.alias("b")
+    joined = left.crossJoin(right).filter(F.col("a.Hotel_Name") != F.col("b.Hotel_Name"))
+    
+    # Formula Haversine in Spark SQL: serve a calcolare la distanza in linea d'aria tra due punti su una sfera (la Terra)
+    #   1. Le coordinate lat e lng sono in gradi, ma la trigonometria funziona in radianti, quindi vanno convertite con F.radians(...)
+    #   2. R = 6371 km (Raggio Terra)
+    #   3. dLat = rad(lat2 - lat1)                                             Differenza tra latitudini in radianti
+    #   4. dLon = rad(lon2 - lon1)                                             Differenza tra longitudini in radianti
+    #   5. distance = sin^2(dLat/2) + cos(lat1) * cos(lat2) * sin^2(dLon/2)    Distanza fra due punti su una sfera (adimensionale tra 0 e 1)
+    #   6. angle = 2 * asin(sqrt(distance))                                    Distanza angolare in radianti
+    #   7. distance_km = R * angle                                             Distanza in km
+    joined = joined.withColumn("lat_a_rad", F.radians(F.col("a.lat"))) \
+                   .withColumn("lon_a_rad", F.radians(F.col("a.lng"))) \
+                   .withColumn("lat_b_rad", F.radians(F.col("b.lat"))) \
+                   .withColumn("lon_b_rad", F.radians(F.col("b.lng"))) \
+                   .withColumn("dlat", F.col("lat_b_rad") - F.col("lat_a_rad")) \
+                   .withColumn("dlon", F.col("lon_b_rad") - F.col("lon_a_rad")) \
+                   .withColumn("distance", F.pow(F.sin(F.col("dlat") / 2), 2) + \
+                                    F.cos(F.col("lat_a_rad")) * F.cos(F.col("lat_b_rad")) * \
+                                    F.pow(F.sin(F.col("dlon") / 2), 2)) \
+                   .withColumn("angle", 2 * F.asin(F.sqrt(F.col("distance")))) \
+                   .withColumn("distance_km", F.lit(6371.0) * F.col("angle"))
+    
+    # Filtriamo per distanza < radius
+    neighbors = joined.filter(F.col("distance_km") <= km_radius)
+    
+    # 3. Aggregazione (Reduce)
+    # Raggruppiamo per Hotel A e calcoliamo stats dei vicini
+    stats = neighbors.groupBy("a.Hotel_Name", "a.Average_Score").agg(
+        F.avg("b.Average_Score").alias("Neighborhood_Avg_Score"),
+        F.count("b.Hotel_Name").alias("Competitor_Count")
+    )
+    
+    # 4. Post-processing
+    final_stats = stats.filter(F.col("Competitor_Count") >= min_competitors) \
+                       .withColumn("Score_Delta", F.col("a.Average_Score") - F.col("Neighborhood_Avg_Score")) \
+                       .withColumn("Status", 
+                                   F.when(F.col("Score_Delta") > 0, "Outperformer")
+                                    .otherwise("Underperformer"))
+                       
+    return final_stats.orderBy(F.col("Score_Delta").desc())

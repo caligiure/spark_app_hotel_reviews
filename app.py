@@ -8,8 +8,9 @@ os.environ['PYSPARK_DRIVER_PYTHON'] = sys.executable
 import streamlit as st
 import pandas as pd
 import altair as alt
-from main import create_spark_session, load_data, get_top_hotels
-from queries import get_top_hotels_by_nation, analyze_review_trends, analyze_tag_influence, analyze_nationality_bias
+from pyspark.sql import SparkSession
+from main import get_top_hotels
+from queries import get_top_hotels_by_nation, analyze_review_trends, analyze_tag_influence, analyze_nationality_bias, analyze_local_competitiveness
 from ml_model import train_satisfaction_model
 from sentiment_analysis import (
     fetch_hotel_reviews, 
@@ -23,14 +24,32 @@ from sentiment_analysis import (
 # Configurazione della pagina
 st.set_page_config(page_title="Hotel Reviews Analytics", layout="wide")
 st.header("📊 Hotel Reviews Analytics con Spark")
+st.divider()
+
 # Inizializzazione Spark (Cached per evitare riavvii)
 @st.cache_resource
-def get_spark_session():
-    return create_spark_session("HotelReviewsGUI")
+def get_spark_session(app_name="HotelReviewsAnalytics"):
+    """Initialize SparkSession"""
+    # 'local[*]' usa tutti i core disponibili del computer locale
+    spark = SparkSession.builder \
+        .appName(app_name) \
+        .master("local[*]") \
+        .getOrCreate()
+    spark.sparkContext.setLogLevel("WARN") # per ridurre il numero di messaggi di debug in console
+    return spark
+
 # Caricamento dati (Cached)
 @st.cache_resource
-def get_data(_spark):
-    return load_data(_spark)
+def get_data(_spark, csv_file="Hotel_Reviews.csv"):
+    """Load data from CSV file"""
+    print(f"Loading data from {csv_file}...")
+    try:
+        df = spark.read.csv(csv_file, header=True, inferSchema=True)
+        print(f"Data loaded. Total rows: {df.count()}") # debug
+        return df
+    except Exception as e:
+        print(f"Error loading file: {e}")
+        return None
 
 # Main App Logic
 try:
@@ -47,43 +66,21 @@ try:
         st.sidebar.header("Opzioni Query")
         # Selezione Query
         query_options = {
-            "Migliori Hotel per Nazione": "top_hotels_by_nation",
             "Trend Recensioni (Time Series)": "review_trends",
             "Analisi Influenza Tag (MapReduce)": "tag_influence",
             "Analisi Bias Nazionalità": "nationality_bias",
+            "Analisi Competitività Locale": "local_competitiveness",
+            "Migliori Hotel per Nazione": "top_hotels_by_nation",
             "Top Hotels (Avg Score)": "top_hotels",
             "Stima Soddisfazione (ML)": "ml_satisfaction",
             "Sentiment Analysis (Local LLM)": "sentiment_analysis",
         }
         selected_query = st.sidebar.radio("Scegli la query da eseguire:", list(query_options.keys()))
-        st.divider()
-        st.subheader(f"Query selezionata: {selected_query}")
         
-        # Query: Top Hotels by Nation
-        if query_options[selected_query] == "top_hotels_by_nation":
-            st.write("Questa query consente di individuare i **migliori hotel per ogni nazione**. Il criterio di ranking utilizzato è il **punteggio medio** ottenuto nelle recensioni dei clienti, inoltre in caso di parità si predilige l'hotel con il **numero totale di recensioni** più elevato.")
-            n_per_nation = st.number_input("Numero di migliori hotel da visualizzare per ogni nazione:", min_value=1, max_value=50, value=3)
-            if st.button("Analizza per Nazione"):
-                 with st.spinner("Analisi dataset in corso..."):
-                    # Esegui la query (da queries.py)
-                    nation_results = get_top_hotels_by_nation(df, n=n_per_nation)
-                    # Converti a Pandas (pdf = pandas dataframe) e visualizza risultati
-                    nation_pdf = nation_results.toPandas()
-                    st.write(f"### Top {n_per_nation} Hotel per Nazione")
-                    st.dataframe(nation_pdf, width='stretch')
-                    # Grafico a barre per confrontare i punteggi
-                    if not nation_pdf.empty:
-                        st.write("#### Distribuzione dei Punteggi degli Hotel")
-                        chart = alt.Chart(nation_pdf).mark_bar().encode(
-                            x=alt.X('Average_Score:Q', title='Punteggio Medio', scale=alt.Scale(domain=[nation_pdf['Average_Score'].min()*0.9, 10])),
-                            y=alt.Y('Hotel_Name:N', sort='-x', title='Hotel'), # -x ordina gli hotel dall'alto al basso in base al valore dell'asse X, in ordine decrescente
-                            color='Nation:N',
-                            tooltip=['Nation', 'Hotel_Name', 'Average_Score']
-                        ).interactive()
-                        st.altair_chart(chart, width='stretch')
+        st.subheader(f"Query selezionata: {selected_query}")
 
         # Query: Trend Recensioni
-        elif query_options[selected_query] == "review_trends":
+        if query_options[selected_query] == "review_trends":
             st.markdown("""
             Questa analisi calcola il **trend temporale** dei punteggi per ogni hotel utilizzando la **Regressione Lineare**.
             
@@ -140,8 +137,12 @@ try:
         # Query: Tag Influence
         elif query_options[selected_query] == "tag_influence":
             st.markdown("""
-            ### Analisi Influenza dei Tag
-            Questa query utilizza un approccio **MapReduce** per analizzare l'impatto dei tag, determinando quali tag ("Couple", "Leisure trip", ecc.) sono associati a voti più alti o più bassi.
+            Questa query analizza l'impatto dei tag che appaiono nelle recensioni (es. "double bedroom", "no windows", ecc.), 
+            determinando quali **caratteristiche degli hotel** influenzano positivamente le recensioni (sono associate a voti più alti) 
+            e quali influenzano negativamente le recensioni (sono associate a voti più bassi).
+
+            Inoltre, per ogni tag viene calcolato un **indice di affidabilità** che tiene conto della frequenza e della deviazione standard dei voti,
+            premiando i tag con elevata frequenza e deviazione standard ridotta (cioè i tag che appaiono spesso e in recensioni con voti simili e coerenti fra loro)
             
             1.  **Map**: Esplode la lista dei tag di ogni recensione.
             2.  **Reduce**: Aggrega per tag calcolando voto medio, frequenza e deviazione standard.
@@ -198,9 +199,10 @@ try:
         # Query: Nationality Bias
         elif query_options[selected_query] == "nationality_bias":
             st.markdown("""
-            ### Analisi Bias per Nazionalità
             Questa query cerca di identificare se esistono nazionalità tendenzialmente più generose o severe nei voti.
             Inoltre, calcola un **Sentiment Ratio** basato sul rapporto tra parole positive e totali usate nelle recensioni.
+
+            Legenda campi:
             
             *   **Reviewer Nationality**: Nazionalità del recensore.
             *   **Average Score**: Voto medio assegnato da recensori di stessa nazionalità.
@@ -243,6 +245,93 @@ try:
                     else:
                         st.warning("Nessuna nazionalità soddisfa i criteri di filtro.")
 
+        # Query: Local Competitiveness
+        elif query_options[selected_query] == "local_competitiveness":
+            st.markdown("""
+            Confronta ogni hotel con i suoi vicini nel raggio di N km, individuando:
+            * **Gemme Locali (Outperformers)**: Hotel con punteggio superiore alla media della zona.
+            * **Hotel sotto la media (Underperformers)**: Hotel con punteggio inferiore alla media della zona.
+            
+            Logica di funzionamento:
+            1. Calcola la distanza fra ogni hotel e i suoi competitor usando la **Formula di Haversine** (con coordinate geografiche in latitudine e longitudine)
+            2. Esclude i competitor che si trovano fuori dal raggio di ricerca specificato
+            3. Analizza le seguenti statistiche per ogni hotel:
+                * `Average_Score` = Media dei voti dell'hotel (valore basato sulle recensioni raccolte nell'ultimo anno)
+                * `Neighborhood_Avg_Score` = Media dei voti dei competitor nella zona
+                * `Score_Delta` = Differenza di punteggio tra l'hotel e la **media dei competitor** (se il delta è positivo, l'hotel è meglio dei competitor)
+                * `Competitor_Count` = Numero di competitor nella zona
+            """)
+            
+            col1, col2 = st.columns(2)
+            with col1:
+                km_radius = st.slider("Raggio di ricerca (km)", 0.5, 10.0, 2.0, step=0.5)
+            with col2:
+                min_competitors = st.number_input("Minimo numero di competitor nella zona", value=5, min_value=1)
+                
+            if st.button("Analizza Competitività"):
+                with st.spinner("Calcolo distanze e analisi di quartiere..."):
+                    comp_df = analyze_local_competitiveness(df, km_radius=km_radius, min_competitors=min_competitors) # da queries.py
+                    comp_pdf = comp_df.toPandas() # dataframe da Spark a Pandas per visualizzazione
+                    
+                    if not comp_pdf.empty:
+                        st.subheader("💎 Top 10 Gemme Locali (Meglio dei competitor vicini)")
+                        gems = comp_pdf[comp_pdf['Score_Delta'] > 0].head(10)
+                        st.dataframe(gems[['Hotel_Name', 'Average_Score', 'Neighborhood_Avg_Score', 'Score_Delta', 'Competitor_Count']].style.format("{:.2f}", subset=['Average_Score', 'Neighborhood_Avg_Score', 'Score_Delta']), width='stretch')
+                        
+                        st.subheader("⚠️ Top 10 Sotto la Media (Peggio dei competitor vicini)")
+                        under = comp_pdf[comp_pdf['Score_Delta'] < 0].sort_values("Score_Delta", ascending=True).head(10)
+                        st.dataframe(under[['Hotel_Name', 'Average_Score', 'Neighborhood_Avg_Score', 'Score_Delta', 'Competitor_Count']].style.format("{:.2f}", subset=['Average_Score', 'Neighborhood_Avg_Score', 'Score_Delta']), width='stretch')
+                        
+                        st.markdown("""
+                        ## Grafico: Performance Relativa
+
+                        Confronto tra il voto dell'hotel (Asse X) e il voto medio della zona (Asse Y).
+                        * **Sotto la diagonale**: L'hotel è meglio della zona (Gemma Locale)
+                        * **Sopra la diagonale**: L'hotel è peggio della zona (Underperformer)
+                        """)
+                        st.info("Nota: cliccando su un punto del grafico è possibile visualizzare le informazioni relative all'hotel.")
+                        chart = alt.Chart(comp_pdf).mark_circle(size=60).encode(
+                            x=alt.X('Average_Score:Q', title='Voto Hotel', scale=alt.Scale(domain=[6, 10])),
+                            y=alt.Y('Neighborhood_Avg_Score:Q', title='Media Voto Zona (Vicini)', scale=alt.Scale(domain=[6, 10])),
+                            color=alt.condition(
+                                alt.datum.Score_Delta > 0,
+                                alt.value("green"),
+                                alt.value("red")
+                            ),
+                            tooltip=['Hotel_Name', 'Average_Score', 'Neighborhood_Avg_Score', 'Competitor_Count', 'Score_Delta']
+                        ).interactive()
+                        
+                        # Aggiungiamo la linea diagonale per riferimento
+                        line = alt.Chart(pd.DataFrame({'x': [6, 10], 'y': [6, 10]})).mark_line(color='gray', strokeDash=[5, 5]).encode(x='x', y='y')
+                        
+                        st.altair_chart(chart + line, width='stretch')
+                        
+                    else:
+                        st.warning(f"Nessun hotel trovato con almeno {min_competitors} competitor nel raggio di {km_radius} km.")
+        
+        # Query: Top Hotels by Nation
+        elif query_options[selected_query] == "top_hotels_by_nation":
+            st.write("Questa query consente di individuare i **migliori hotel per ogni nazione**. Il criterio di ranking utilizzato è il **punteggio medio** ottenuto nelle recensioni dei clienti, inoltre in caso di parità si predilige l'hotel con il **numero totale di recensioni** più elevato.")
+            n_per_nation = st.number_input("Numero di migliori hotel da visualizzare per ogni nazione:", min_value=1, max_value=50, value=3)
+            if st.button("Analizza per Nazione"):
+                 with st.spinner("Analisi dataset in corso..."):
+                    # Esegui la query (da queries.py)
+                    nation_results = get_top_hotels_by_nation(df, n=n_per_nation)
+                    # Converti a Pandas (pdf = pandas dataframe) e visualizza risultati
+                    nation_pdf = nation_results.toPandas()
+                    st.write(f"### Top {n_per_nation} Hotel per Nazione")
+                    st.dataframe(nation_pdf, width='stretch')
+                    # Grafico a barre per confrontare i punteggi
+                    if not nation_pdf.empty:
+                        st.write("#### Distribuzione dei Punteggi degli Hotel")
+                        chart = alt.Chart(nation_pdf).mark_bar().encode(
+                            x=alt.X('Average_Score:Q', title='Punteggio Medio', scale=alt.Scale(domain=[nation_pdf['Average_Score'].min()*0.9, 10])),
+                            y=alt.Y('Hotel_Name:N', sort='-x', title='Hotel'), # -x ordina gli hotel dall'alto al basso in base al valore dell'asse X, in ordine decrescente
+                            color='Nation:N',
+                            tooltip=['Nation', 'Hotel_Name', 'Average_Score']
+                        ).interactive()
+                        st.altair_chart(chart, width='stretch')
+        
         # Query: Top Hotels
         elif query_options[selected_query] == "top_hotels":
             num_results = st.number_input("Seleziona il numero di risultati da visualizzare:", min_value=1, max_value=100, value=10)
@@ -388,11 +477,9 @@ try:
                             st.dataframe(impact_df)
                         else:
                             st.info("Nessun dato significativo.")
-
-
-
             else:
                 st.info("👆 Clicca su 'Prepara Dati' per iniziare.")
+
     else:
         st.error("Impossibile caricare il dataset. Controlla che 'Hotel_Reviews.csv' sia nella cartella.")
 
