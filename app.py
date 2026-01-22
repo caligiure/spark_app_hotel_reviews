@@ -12,7 +12,7 @@ import pydeck as pdk
 from pyspark.sql import SparkSession
 import time
 from main import get_top_hotels
-from queries import get_top_hotels_by_nation, analyze_review_trends, analyze_tag_influence, analyze_nationality_bias, analyze_local_competitiveness, segment_hotels_kmeans, compare_local_vs_tourist_reviews
+from queries import get_top_hotels_by_nation, analyze_review_trends, analyze_tag_influence, analyze_nationality_bias, analyze_local_competitiveness, segment_hotels_kmeans, compare_local_vs_tourist_reviews, analyze_seasonal_preferences
 from ml_model import train_satisfaction_model
 from sentiment_analysis import (
     fetch_hotel_reviews, 
@@ -75,6 +75,7 @@ try:
             "Segmentazione Hotel (K-Means)": "hotel_clustering",
             "Migliori Hotel per Nazione": "top_hotels_by_nation",
             "Locals vs Tourists - Preferenze e distribuzione clienti": "local_vs_tourist",
+            "Analisi Stagionale & Target": "seasonal_preferences",
             "Top Hotels (Avg Score)": "top_hotels",
             "Stima Soddisfazione (ML)": "ml_satisfaction",
             "Sentiment Analysis (Local LLM)": "sentiment_analysis",
@@ -699,6 +700,152 @@ try:
 
                     else:
                         st.warning(f"Nessun hotel trovato con almeno {min_revs_group} recensioni per entrambi i gruppi.")
+
+        # Query: Seasonal Preferences
+        elif query_options[selected_query] == "seasonal_preferences":
+            st.markdown("""
+            #### 🍂👨‍👩‍👧‍👦 Analisi Stagionale e Profilazione Viaggiatore
+            
+            Scopri **quando** andare e **con chi**. Questa query analizza come cambiano le performance degli hotel in base alla **Stagione** e al **Tipo di Viaggiatore**.
+            
+            *   **Season**: Inverno, Primavera, Estate, Autunno (derivata dalla data delle recensioni).
+            *   **Traveler Type**: Families, Couples, Business, Solo, Group (derivato dai Tag).
+            """)
+            
+            # Filtri
+            col_seasons, col_types = st.columns(2)
+            
+            with col_seasons:
+                st.markdown("**Seleziona Stagioni:**")
+                seasons_list = ["Winter", "Spring", "Summer", "Autumn"]
+                selected_seasons = []
+                for s_name in seasons_list:
+                    if st.checkbox(s_name, value=True, key=f"chk_s_{s_name}"):
+                        selected_seasons.append(s_name)
+            
+            with col_types:
+                st.markdown("**Seleziona Tipo Viaggiatore:**")
+                types_list = ["Family", "Couple", "Business", "Solo", "Group", "Leisure"]
+                selected_types = []
+                for t_name in types_list:
+                    if st.checkbox(t_name, value=True, key=f"chk_t_{t_name}"):
+                        selected_types.append(t_name)
+                
+            min_revs_seas = st.slider("Minimo recensioni per includere un hotel nella ricerca:", 5, 50, 10)
+            
+            if "seasonal_pdf" not in st.session_state:
+                st.session_state["seasonal_pdf"] = None
+
+            if st.button("Analizza Stagionalità"):
+                with st.spinner("Calcolo metriche stagionali per segmento..."):
+                    # Esecuzione Query PySpark
+                    seasonal_df = analyze_seasonal_preferences(df, min_reviews=min_revs_seas)
+                    pdf = seasonal_df.toPandas()
+                    st.session_state["seasonal_pdf"] = pdf
+            
+            # Recuperiamo i dati dalla sessione (se presenti)
+            if st.session_state["seasonal_pdf"] is not None:
+                pdf = st.session_state["seasonal_pdf"]
+                
+                if not pdf.empty:
+                    # Filtering in Pandas (per visualizzazione) 
+                    display_df = pdf.copy()
+
+                    # Nessuna selezione = "Mostra Tutto" (inclusi i valori nascosti come "Other"). 
+                    # Selezione attiva = "Mostra solo le righe che soddisfano i campi spuntati".
+
+                    # Filtra Stagioni
+                    if selected_seasons: # se l'utente non ha selezionato nessun campo, questo filtraggio viene saltato
+                        display_df = display_df[display_df['Season'].isin(selected_seasons)]
+                    
+                    # Filtra Tipi Viaggiatore
+                    if selected_types: # se l'utente non ha selezionato nessun campo, questo filtraggio viene saltato
+                        display_df = display_df[display_df['Traveler_Type'].isin(selected_types)]
+                        
+                    # Formatta le stringhe del titolo
+                    # Prende la lista di opzioni selezionate (che è una lista di stringhe, ad esempio ['Winter', 'Summer']) 
+                    # e le unisce in un'unica stringa separata da virgole.
+                    # Se non ci sono opzioni selezionate, restituisce "All".
+                    season_str = ", ".join(selected_seasons) if selected_seasons else "All Seasons"
+                    type_str = ", ".join(selected_types) if selected_types else "All Traveler Types"
+                    
+                    # 1. Top Hotel Table
+                    st.subheader(f"🏆 Top Hotel: {season_str} & {type_str}")
+                    st.write("I migliori hotel per la combinazione selezionata.")
+                    
+                    top_hotels = display_df.sort_values("Avg_Score", ascending=False).head(20)
+                    st.dataframe(top_hotels[['Hotel_Name', 'Season', 'Traveler_Type', 'Avg_Score', 'Review_Count', 'Nation']].style.format("{:.2f}", subset=['Avg_Score']), width='stretch')
+                    
+                    # 2. Heatmap Hotel Specifico
+                    st.divider()
+                    st.subheader("🌡️ Heatmap Stagionale Hotel")
+                    st.write("Seleziona un hotel per vedere come performa in tutte le stagioni e con tutti i tipi di viaggiatori.")
+                    
+                    # Lista hotel unici dai risultati (ordinati per score generale nel filtro corrente, o globale se All)
+                    unique_hotels = display_df['Hotel_Name'].unique()
+                    if len(unique_hotels) > 0:
+                        hotel_to_inspect = st.selectbox("Scegli Hotel da analizzare", unique_hotels)
+                        
+                        # Filtriamo il PDF originale (completo) per quell'hotel
+                        hotel_stats = pdf[pdf['Hotel_Name'] == hotel_to_inspect]
+                        
+                        # Heatmap Chart
+                        # X = Season (Ordiniamo logicamente)
+                        # Y = Traveler Type
+                        # Color = Avg_Score
+                        
+                        base = alt.Chart(hotel_stats).encode(
+                            x=alt.X('Season:N', sort=["Winter", "Spring", "Summer", "Autumn"], title="Stagione"),
+                            y=alt.Y('Traveler_Type:N', title="Tipo Viaggiatore")
+                        )
+                        
+                        heatmap = base.mark_rect().encode(
+                            color=alt.Color('Avg_Score:Q', scale=alt.Scale(domain=[6, 10], scheme='redyellowgreen'), title="Voto Medio"),
+                            tooltip=['Season', 'Traveler_Type', 'Avg_Score', 'Review_Count']
+                        )
+                        
+                        text = base.mark_text(baseline='middle').encode(
+                            text=alt.Text('Avg_Score', format='.1f'),
+                            color=alt.value('black') # O dinamico in base al background
+                        )
+                        
+                        st.altair_chart(heatmap + text, width='stretch')
+                        
+                    # 3. Mappa Top Results
+                    st.subheader(f"🗺️ Mappa dei migliori risultati ({season_str} - {type_str})")
+                    st.info("Nota: cliccando su un punto della mappa è possibile visualizzare le informazioni relative all'hotel.")
+                    # Usiamo top_hotels filtrato
+                    map_df = top_hotels.dropna(subset=['lat', 'lng'])
+                    if not map_df.empty:
+                        view_state = pdk.ViewState(
+                            latitude=map_df["lat"].mean(),
+                            longitude=map_df["lng"].mean(),
+                            zoom=4
+                        )
+                        layer = pdk.Layer(
+                            "ScatterplotLayer",
+                            data=map_df,
+                            get_position='[lng, lat]',
+                            get_color='[0, 128, 255, 200]',
+                            get_radius=10000,
+                            pickable=True,
+                            opacity=0.8,
+                            filled=True,
+                            radius_min_pixels=5,
+                            radius_max_pixels=50,
+                        )
+                        st.pydeck_chart(pdk.Deck(
+                            map_style=None,
+                            initial_view_state=view_state,
+                            layers=[layer],
+                            tooltip={
+                                "html": "<b>{Hotel_Name}</b><br/>Score: {Avg_Score}<br/>Type: {Traveler_Type}<br/>Season: {Season}",
+                                "style": {"color": "white"}
+                            }
+                        ))
+                        
+                else:
+                    st.warning("Nessun dato trovato con i criteri minimi selezionati.")
 
         # Query: Top Hotels
         elif query_options[selected_query] == "top_hotels":

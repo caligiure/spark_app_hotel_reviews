@@ -514,3 +514,90 @@ def compare_local_vs_tourist_reviews(df, min_reviews_per_group=10):
 
     # 8. Ordinamento per valore assoluto del delta, per vedere le discrepanze più forti, in senso decrescente
     return final_df_with_stats.orderBy(F.col("Preference_Delta").desc())
+
+def analyze_seasonal_preferences(df, min_reviews=10):
+    """
+    Analizza le preferenze stagionali e per tipologia di viaggiatore.
+    
+    Args:
+        df: DataFrame PySpark
+        min_reviews: Minimo numero di recensioni per segmento (Hotel + Season + Type)
+        
+    Returns:
+        DataFrame con statistiche per Hotel, Stagione e Tipologia Viaggiatore.
+    """
+    
+    # 1. Data Parsing & Enrichment (Map Logic)
+    
+    # Conversione data per estrarre il mese: Review_Date è stringa 'M/d/yyyy' -> parsing a pyspark.sql.types.DateType
+    df_enriched = df.withColumn("Review_Date_Parsed", F.to_date(F.col("Review_Date"), "M/d/yyyy")) \
+                    .withColumn("Month", F.month("Review_Date_Parsed"))
+    
+    # Derivazione Stagione
+    # Winter: 12, 1, 2
+    # Spring: 3, 4, 5
+    # Summer: 6, 7, 8
+    # Autumn: 9, 10, 11
+    df_enriched = df_enriched.withColumn(
+        "Season",
+        F.when(F.col("Month").isin(12, 1, 2), "Winter")
+         .when(F.col("Month").isin(3, 4, 5), "Spring")
+         .when(F.col("Month").isin(6, 7, 8), "Summer")
+         .when(F.col("Month").isin(9, 10, 11), "Autumn")
+         .otherwise("Unknown")
+    )
+    
+    # Derivazione traveler Types (Multi-label)
+    # Un recensore può essere sia "Family" che "Leisure", o "Couple" e "Leisure".
+    # Usiamo array() per collezionare tutti i match, e poi explode() per duplicare la riga per ogni match.
+    
+    # Normalizziamo i tags in minuscolo per case-insensitive matching
+    df_enriched = df_enriched.withColumn("Tags_Lower", F.lower(F.col("Tags")))
+    
+    # Creiamo una colonna array con tutti i tipi trovati
+    # Nota: definiamo una lista di regole (Type, Keyword)
+    # Se la keyword è presente nei tags, aggiungiamo il Type all'array
+    types_expr = F.array(
+        F.when(F.col("Tags_Lower").contains("business"), "Business").otherwise(None),
+        F.when(F.col("Tags_Lower").contains("family"), "Family").otherwise(None),
+        F.when(F.col("Tags_Lower").contains("couple"), "Couple").otherwise(None),
+        F.when(F.col("Tags_Lower").contains("solo"), "Solo").otherwise(None),
+        F.when(F.col("Tags_Lower").contains("group"), "Group").otherwise(None),
+        F.when(F.col("Tags_Lower").contains("leisure"), "Leisure").otherwise(None),
+        F.lit("Other")
+    )
+    
+    # explode(types_expr) -> crea una riga per ogni elemento dell'array (duplicando gli altri campi dalla riga originale corrispondente nel DataFrame)
+    # filter rimuove le righe con null
+    df_exploded = df_enriched.withColumn("Traveler_Type_Raw", F.explode(types_expr)) \
+                             .filter(F.col("Traveler_Type_Raw").isNotNull()) \
+                             .withColumnRenamed("Traveler_Type_Raw", "Traveler_Type")
+    # Se una recensione non ha nessun tag riconosciuto, apparirà solo con il tag "Other"
+
+    # 2. Aggregazione (Reduce Logic): raggruppa per Hotel, Stagione e Tipologia
+    stats = df_exploded.groupBy(
+        "Hotel_Name", 
+        "Hotel_Address", # per conoscere la nazione dell'hotel
+        "Season", 
+        "Traveler_Type"
+    ).agg(
+        F.avg("Reviewer_Score").alias("Avg_Score"),
+        F.count("Reviewer_Score").alias("Review_Count"),
+        F.when(F.first("lat") == "NA", None).otherwise(F.first("lat")).cast("double").alias("lat"), # lat e lng servono per la mappa
+        F.when(F.first("lng") == "NA", None).otherwise(F.first("lng")).cast("double").alias("lng")
+    )
+    
+    # 3. Filtering
+    final_stats = stats.filter(F.col("Review_Count") >= min_reviews)
+    
+    # 4. Estrazione Nazione
+    final_stats = final_stats.withColumn(
+        "Nation_Raw", F.element_at(F.split(F.col("Hotel_Address"), " "), -1)
+    ).withColumn(
+        "Nation", 
+        F.when(F.col("Nation_Raw") == "Kingdom", "United Kingdom")
+         .otherwise(F.col("Nation_Raw"))
+    ).drop("Nation_Raw")
+
+    # Ordine per Score decrescente
+    return final_stats.orderBy(F.col("Avg_Score").desc())
