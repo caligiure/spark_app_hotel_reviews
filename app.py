@@ -74,7 +74,7 @@ try:
             "Analisi Competitività Locale": "local_competitiveness",
             "Segmentazione Hotel (K-Means)": "hotel_clustering",
             "Migliori Hotel per Nazione": "top_hotels_by_nation",
-            "Preferenze - Locals vs Tourists": "local_vs_tourist",
+            "Locals vs Tourists - Preferenze e distribuzione clienti": "local_vs_tourist",
             "Top Hotels (Avg Score)": "top_hotels",
             "Stima Soddisfazione (ML)": "ml_satisfaction",
             "Sentiment Analysis (Local LLM)": "sentiment_analysis",
@@ -585,7 +585,7 @@ try:
         # Query: Local vs Tourist
         elif query_options[selected_query] == "local_vs_tourist":
             st.markdown("""
-            ##### 🏠 Locals' Favorites vs 📸 Tourist Traps
+            #### 🏠 Locals' Favorites vs 📸 Tourist Traps
             
             Analizza come cambia la percezione degli hotel tra chi è del posto (Locals) e i turisti internazionali (Tourists).
             
@@ -598,6 +598,9 @@ try:
             *   **Preference_Delta** (`Local - Tourist`): 
                 *   Valori **POSITIVI** (> 0): L'hotel piace più ai Locali (possibile "Gemma Nascosta" o esperienza autentica).
                 *   Valori **NEGATIVI** (< 0): L'hotel piace più ai Turisti (possibile "Tourist Trap" o standard internazionale generico).
+
+            #### 🌍 Distribuzione Nazionalità
+            Visualizza graficamente la composizione delle nazionalità dei visitatori per ciascun hotel.
             """)
             
             min_revs_group = st.slider("Minimo recensioni per gruppo (Local & Tourist)", 5, 100, 20, help="Esclude hotel con pochi dati per uno dei due gruppi")
@@ -615,12 +618,12 @@ try:
                         st.subheader("🏠 Hotel preferiti dai Locali (Rispetto ai Turisti)")
                         st.write("Hotel dove il voto dei locali supera di più quello dei turisti.")
                         local_favs = comp_pdf.sort_values("Preference_Delta", ascending=False).head(10)
-                        st.dataframe(local_favs[['Hotel_Name', 'Hotel_Nation', 'Local_Avg_Score', 'Tourist_Avg_Score', 'Preference_Delta']].style.format("{:.2f}", subset=['Local_Avg_Score', 'Tourist_Avg_Score', 'Preference_Delta']).background_gradient(subset=['Preference_Delta'], cmap='Greens'), width='stretch')
+                        st.dataframe(local_favs[['Hotel_Name', 'Hotel_Nation', 'Local_Avg_Score', 'Tourist_Avg_Score', 'Preference_Delta', 'Top_Nationalities']].style.format("{:.2f}", subset=['Local_Avg_Score', 'Tourist_Avg_Score', 'Preference_Delta']).background_gradient(subset=['Preference_Delta'], cmap='Greens'), width='stretch')
                             
                         st.subheader("📸 Hotel preferiti dai Turisti (Rispetto ai Locali)")
                         st.write("Hotel dove il voto dei turisti supera di più quello dei locali.")
                         tourist_favs = comp_pdf.sort_values("Preference_Delta", ascending=True).head(10)
-                        st.dataframe(tourist_favs[['Hotel_Name', 'Hotel_Nation', 'Local_Avg_Score', 'Tourist_Avg_Score', 'Preference_Delta']].style.format("{:.2f}", subset=['Local_Avg_Score', 'Tourist_Avg_Score', 'Preference_Delta']).background_gradient(subset=['Preference_Delta'], cmap='Reds_r'), width='stretch')
+                        st.dataframe(tourist_favs[['Hotel_Name', 'Hotel_Nation', 'Local_Avg_Score', 'Tourist_Avg_Score', 'Preference_Delta', 'Top_Nationalities']].style.format("{:.2f}", subset=['Local_Avg_Score', 'Tourist_Avg_Score', 'Preference_Delta']).background_gradient(subset=['Preference_Delta'], cmap='Reds_r'), width='stretch')
                         
                         st.subheader("Grafico: Discrepanza Voti")
                         st.write("Confronto diretto tra Voto Local (Y) e Voto Tourist (X).")
@@ -637,6 +640,62 @@ try:
                         # Diagonale
                         line = alt.Chart(pd.DataFrame({'x': [6, 10], 'y': [6, 10]})).mark_line(color='gray', strokeDash=[5, 5]).encode(x='x', y='y')
                         st.altair_chart(chart + line, width='stretch')
+
+                        # --- Stacked Bar Chart Nazionalità ---
+                        st.markdown("""
+                        #### 🌍 Distribuzione Nazionalità
+
+                        Visualizza la composizione percentuale delle nazionalità dei visitatori degli Hotel per ciascuna categoria.
+
+                        Sono escluse le nazionalità che rappresentano meno del 2% dei visitatoridi un hotel.
+                        La non totalità delle percentuali per un hotel può dipendere sia da questa esclusione arbitraria,
+                        sia dall'eventuale mancanza di dati sulla nazionalità dei visitatori.
+
+                        """)
+                        st.info("Nota: cliccando su un punto del grafico è possibile visualizzare le informazioni relative ad hotel e distribuzione nazionalità.")
+                        # Helper per parsare la stringa "Nation (XX%), Nation (YY%)"
+                        def parse_nationalities(row, category):
+                            if not row['Top_Nationalities']: return []
+                            items = str(row['Top_Nationalities']).split(", ")
+                            parsed = []
+                            for item in items:
+                                try:
+                                    # Expect format: "Nation Name (XX%)"
+                                    name, pct = item.rsplit(" (", 1)
+                                    pct = float(pct.rstrip("%)"))
+                                    parsed.append({
+                                        "Hotel_Name": row['Hotel_Name'],
+                                        "Nation": name,
+                                        "Percentage": pct,
+                                        "Category": category
+                                    })
+                                except:
+                                    continue
+                            return parsed
+
+                        # Preparazione Dati per Grafico
+                        chart_data = []
+                        for _, row in local_favs.iterrows():
+                            chart_data.extend(parse_nationalities(row, "Local Favorites"))
+                        for _, row in tourist_favs.iterrows():
+                            chart_data.extend(parse_nationalities(row, "Tourist Favorites"))
+                            
+                        if chart_data:
+                            nat_chart_df = pd.DataFrame(chart_data)
+                            
+                            # Grafico Stacked Bar diviso per Categoria (Local Favs vs Tourist Favs)
+                            bars = alt.Chart(nat_chart_df).mark_bar().encode(
+                                y=alt.Y('Hotel_Name:N', sort='-x', title='Hotel'),
+                                x=alt.X('Percentage:Q', title='Percentuale Visitatori'),
+                                color=alt.Color('Nation:N', scale=alt.Scale(scheme='tableau20'), title='Nazionalità'),
+                                tooltip=['Hotel_Name', 'Nation', 'Percentage']
+                            )
+                            
+                            st.altair_chart(bars.facet(
+                                row=alt.Row('Category:N', title=None, header=alt.Header(titleOrient="top", labelOrient="top", labelFontSize=14, labelFontWeight='bold'))
+                            ).resolve_scale(y='independent'), width='stretch')
+                        else:
+                            st.warning("Dati sulle nazionalità non disponibili per il grafico.")
 
                     else:
                         st.warning(f"Nessun hotel trovato con almeno {min_revs_group} recensioni per entrambi i gruppi.")

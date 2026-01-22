@@ -421,6 +421,7 @@ def compare_local_vs_tourist_reviews(df, min_reviews_per_group=10):
     """
     Confronta i punteggi dati dai locali (stessa nazione dell'hotel) vs turisti (nazione diversa).
     Identifica "Local Favorites" (prefeiti dai locali) e "Tourist Traps/Favorites" (preferiti dai turisti).
+    Inoltre, calcola la composizione delle nazionalità dei visitatori per ciascun hotel (esclude nazionalità con percentuali < 2%).
     
     Args:
         df: DataFrame PySpark
@@ -441,9 +442,9 @@ def compare_local_vs_tourist_reviews(df, min_reviews_per_group=10):
          .otherwise(F.col("Hotel_Nation_Raw"))
     )
     
-    # 2. Pulizia Nazionalità Recensore
-    # Trim degli spazi
+    # 2. Pulizia Nazionalità Recensore (Trim degli spazi)
     df_prep = df_prep.withColumn("Reviewer_Nationality_Clean", F.trim(F.col("Reviewer_Nationality")))
+    # df_prep aggiunge al df originale i campi Hotel_Nation e Reviewer_Nationality_Clean
     
     # 3. Classificazione Review (Local vs Tourist)
     # Local = Recensore della stessa nazione dell'hotel
@@ -477,6 +478,39 @@ def compare_local_vs_tourist_reviews(df, min_reviews_per_group=10):
         "Preference_Delta", 
         F.col("Local_Avg_Score") - F.col("Tourist_Avg_Score")
     )
+
+    # --- STEP AGGIUNTIVO: Top Nationalities Summary ---
+    # Calcolo dei top 10 gruppi nazionali per hotel
+    # usiamo df_prep (creato prima), che dispone dei campi Hotel_Nation e Reviewer_Nationality_Clean
     
-    # Ordinamento per valore assoluto del delta, per vedere le discrepanze più forti, in senso decrescente
-    return final_df.orderBy(F.col("Preference_Delta").desc())
+    # 1. Total Reviews per Hotel (serve per le percentuali)
+    hotel_totals = df_prep.groupBy("Hotel_Name").agg(F.count("Reviewer_Nationality_Clean").alias("Total_Reviews"))
+    
+    # 2. Count per Nation per Hotel
+    # restituisce una tabella con Hotel_Name, Reviewer_Nationality_Clean e Nat_Count
+    nat_counts = df_prep.groupBy("Hotel_Name", "Reviewer_Nationality_Clean").agg(F.count("*").alias("Nat_Count"))
+    
+    # 3. Join di nat_counts con hotel_totals per avere il totale e calcolare %
+    nat_stats = nat_counts.join(hotel_totals, "Hotel_Name") \
+        .withColumn("Pct", (F.col("Nat_Count") / F.col("Total_Reviews") * 100).cast("int"))
+
+    # 4. Filter per escludere nazionalità con percentuali < 2%
+    top_nats = nat_stats.filter(F.col("Pct") >= 2)
+    
+    # 5. Formattazione Stringa "Nation (percentage)"
+    top_nats = top_nats.withColumn(
+        "Summary", 
+        F.concat(F.col("Reviewer_Nationality_Clean"), F.lit(" ("), F.col("Pct"), F.lit("%)"))
+    )
+    
+    # 6. Collect list per avere una sola stringa per hotel
+    # Es. "United Kingdom (45%), USA (21%), Australia (10%)"
+    nat_summary = top_nats.groupBy("Hotel_Name").agg(
+        F.concat_ws(", ", F.collect_list("Summary")).alias("Top_Nationalities")
+    )
+    
+    # 7. Join finale con final_df
+    final_df_with_stats = final_df.join(nat_summary, "Hotel_Name", "left")
+
+    # 8. Ordinamento per valore assoluto del delta, per vedere le discrepanze più forti, in senso decrescente
+    return final_df_with_stats.orderBy(F.col("Preference_Delta").desc())
