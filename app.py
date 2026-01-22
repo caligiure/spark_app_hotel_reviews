@@ -12,7 +12,8 @@ import pydeck as pdk
 from pyspark.sql import SparkSession
 import time
 from main import get_top_hotels
-from queries import get_top_hotels_by_nation, analyze_review_trends, analyze_tag_influence, analyze_nationality_bias, analyze_local_competitiveness, segment_hotels_kmeans, compare_local_vs_tourist_reviews, analyze_seasonal_preferences
+from queries import get_top_hotels_by_nation, analyze_review_trends, analyze_tag_influence, analyze_nationality_bias, \
+    analyze_local_competitiveness, segment_hotels_kmeans, compare_local_vs_tourist_reviews, analyze_seasonal_preferences, analyze_stay_duration
 from ml_model import train_satisfaction_model
 from sentiment_analysis import (
     fetch_hotel_reviews, 
@@ -76,6 +77,7 @@ try:
             "Migliori Hotel per Nazione": "top_hotels_by_nation",
             "Locals vs Tourists - Preferenze e distribuzione clienti": "local_vs_tourist",
             "Analisi Stagionale & Target": "seasonal_preferences",
+            "Analisi Durata Soggiorno": "stay_duration",
             "Top Hotels (Avg Score)": "top_hotels",
             "Stima Soddisfazione (ML)": "ml_satisfaction",
             "Sentiment Analysis (Local LLM)": "sentiment_analysis",
@@ -846,6 +848,114 @@ try:
                         
                 else:
                     st.warning("Nessun dato trovato con i criteri minimi selezionati.")
+        
+        # Query: Stay Duration
+        elif query_options[selected_query] == "stay_duration":
+            st.markdown("""
+            #### ⏳ Analisi dell'impatto della Durata del Soggiorno
+            
+            Analizza come varia la soddisfazione dei clienti in base alla durata del loro soggiorno.
+            Le durate sono categorizzate in:
+            *   **Short Stay**: 1-3 notti
+            *   **Medium Stay**: 4-7 notti
+            *   **Long Stay**: 8+ notti
+            
+            Questa analisi aiuta a capire quali hotel sono più adatti a toccate e fuga o a lunghe vacanze.
+            """)
+            
+            min_revs_stay = st.slider("Minimo recensioni per categoria/hotel", 5, 100, 20)
+            
+            if st.button("Analizza Durata"):
+                with st.spinner("Estrazione durata dai tag e analisi..."):
+                    stay_df = analyze_stay_duration(df, min_reviews=min_revs_stay) # da queries.py
+                    pdf = stay_df.toPandas() # da Spark a Pandas per visualizzazione
+                    
+                    if not pdf.empty:
+                        # 1. Global Analysis per categoria
+
+                        # Media punteggio per categoria
+                        global_stats = pdf.groupby("Stay_Category")['Avg_Score'].mean().reset_index()
+                        # Punteggio medio calcolato su tutte le categorie
+                        mean_val = global_stats['Avg_Score'].mean()
+                        # Calcolo differenza dalla media per evidenziare i piccoli scostamenti
+                        global_stats['Delta'] = global_stats['Avg_Score'] - mean_val
+                        
+                        st.subheader("📊 Performance Globale (Scostamento dalla Media)")
+                        st.metric("Punteggio medio di riferimento (globale, calcolato su tutte le categorie)", round(mean_val, 2)) # arrotonda a due cifre decimali
+                        st.write("Il delta indica di quanto il punteggio medio di una categoria si discosta dal punteggio medio globale.")
+                        st.write("Se una categoria ha un delta positivo, significa che i clienti che hanno fatto soggiorni di quella durata \
+                            sono più soddisfatti rispetto alla media generale. Viceversa, un delta negativo indica una soddisfazione inferiore.")
+
+                        # Chart Divergenze
+                        base = alt.Chart(global_stats).encode(
+                            x=alt.X('Delta:Q', title="Scostamento dalla Media (Punti)", axis=alt.Axis(format='+.3f')),
+                            y=alt.Y('Stay_Category:N', sort=["Short Stay (1-3)", "Medium Stay (4-7)", "Long Stay (8+)"], title="Durata Soggiorno"),
+                            tooltip=['Stay_Category', 'Avg_Score', 'Delta']
+                        )
+                        
+                        bars = base.mark_bar().encode(
+                            color=alt.condition(
+                                alt.datum.Delta > 0,
+                                alt.value("green"),  # Positivo
+                                alt.value("red")     # Negativo
+                            )
+                        )
+                        
+                        # Text for positive values
+                        text_pos = base.transform_filter(
+                            alt.datum.Delta > 0
+                        ).mark_text(
+                            align='left', 
+                            dx=5
+                        ).encode(
+                            text=alt.Text('Avg_Score', format='.3f')
+                        )
+                        
+                        # Text for negative (or zero) values
+                        text_neg = base.transform_filter(
+                            alt.datum.Delta <= 0
+                        ).mark_text(
+                            align='right', 
+                            dx=-5
+                        ).encode(
+                            text=alt.Text('Avg_Score', format='.3f')
+                        )
+                        
+                        st.altair_chart(bars + text_pos + text_neg, width='stretch')
+                        
+                        # 2. Top Hotels per Categoria
+                        col1, col2, col3 = st.columns(3)
+                        
+                        with col1:
+                            st.write("**🏆 Top Short Stays**")
+                            short_df = pdf[pdf['Stay_Category'] == "Short Stay (1-3)"].sort_values("Avg_Score", ascending=False).head(5)
+                            st.dataframe(short_df[['Hotel_Name', 'Avg_Score', 'Review_Count']].style.format("{:.2f}", subset=['Avg_Score']), width='stretch')
+                            
+                        with col2:
+                            st.write("**🏆 Top Medium Stays**")
+                            med_df = pdf[pdf['Stay_Category'] == "Medium Stay (4-7)"].sort_values("Avg_Score", ascending=False).head(5)
+                            st.dataframe(med_df[['Hotel_Name', 'Avg_Score', 'Review_Count']].style.format("{:.2f}", subset=['Avg_Score']), width='stretch')
+                            
+                        with col3:
+                            st.write("**🏆 Top Long Stays**")
+                            long_df = pdf[pdf['Stay_Category'] == "Long Stay (8+)"].sort_values("Avg_Score", ascending=False).head(5)
+                            st.dataframe(long_df[['Hotel_Name', 'Avg_Score', 'Review_Count']].style.format("{:.2f}", subset=['Avg_Score']), width='stretch')
+                            
+                        # 3. Scatter Plot Detailed
+                        st.subheader("Deep Dive: Performance Hotel")
+                        st.write("Ogni punto è un hotel in una specifica categoria di durata.")
+                        st.info("Nota: cliccando su un punto del grafico è possibile visualizzare le informazioni relative all'hotel.")
+                        
+                        scatter = alt.Chart(pdf).mark_circle(size=60).encode(
+                            x=alt.X('Avg_Nights_Actual:Q', title='Media Notti Reali'),
+                            y=alt.Y('Avg_Score:Q', scale=alt.Scale(domain=[6, 10]), title='Punteggio Medio'),
+                            color='Stay_Category:N',
+                            tooltip=['Hotel_Name', 'Stay_Category', 'Avg_Score', 'Review_Count', 'Avg_Nights_Actual']
+                        ).interactive()
+                        st.altair_chart(scatter, width='stretch')
+                        
+                    else:
+                        st.warning("Nessun dato trovato con i filtri correnti.")
 
         # Query: Top Hotels
         elif query_options[selected_query] == "top_hotels":

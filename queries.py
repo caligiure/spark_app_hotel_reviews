@@ -8,67 +8,6 @@ from pyspark.ml.feature import VectorAssembler, StandardScaler
 from pyspark.ml.clustering import KMeans
 from pyspark.ml import Pipeline
 
-def get_top_hotels_by_nation(df, n=10):
-    """
-    Raggruppa gli hotel per nazione e trova gli n migliori per ogni nazione
-    basandosi su un criterio di punteggio (default: Average_Score).
-    Args:
-        df: DataFrame PySpark con i dati degli hotel
-        n: Numero di hotel da mostrare per ogni nazione
-    Returns:
-        DataFrame PySpark con le colonne selezionate e i top n hotel per nazione
-    """
-    # 1. Deduplicazione per Hotel: Conserviamo una sola riga per hotel
-    # Nota: Hotel_Address, Average_Score e Total_Number_of_Reviews sono costanti per lo stesso Hotel_Name
-    unique_hotels_df = df.select(
-        "Hotel_Name", 
-        "Hotel_Address", 
-        "Average_Score", 
-        "Total_Number_of_Reviews",
-        F.when(F.col("lat") == "NA", None).otherwise(F.col("lat")).cast("double").alias("lat"),
-        F.when(F.col("lng") == "NA", None).otherwise(F.col("lng")).cast("double").alias("lng")
-    ).dropDuplicates(["Hotel_Name"])
-
-    # 2. Estrazione della Nazione (la nazione è l'ultima parola dell'indirizzo)
-    df_with_nation = unique_hotels_df.withColumn("Nation_Raw", F.element_at(F.split(F.col("Hotel_Address"), " "), -1))
-    # Nota: uso le funzioni native di Spark (F.split, F.element_at, etc.) perchè è molto più efficiente 
-    # rispetto all'uso delle funzioni built-in di Python (le funzioni di spark vengono eseguite direttamente nella JVM)
-    
-    # Correggiamo le nazioni multi-parole
-    df_with_nation = df_with_nation.withColumn(
-        "Nation", 
-        F.when(F.col("Nation_Raw") == "Kingdom", "United Kingdom")
-         .otherwise(F.col("Nation_Raw"))
-    )
-    
-    # 3. Ranking (Top N per Nazione)
-    # Definiamo una finestra partizionata per Nazione e ordinata per Average_Score decrescente
-    # Se due hotel hanno lo stesso punteggio, vince chi ha più recensioni (Total_Number_of_Reviews).
-    window_spec = Window.partitionBy("Nation").orderBy(F.col("Average_Score").desc(), F.col("Total_Number_of_Reviews").desc())
-    # Nota: una Window Function permette di eseguire calcoli su un gruppo di righe correlate alla riga corrente, 
-    # senza collassare le righe in una sola (come fa invece groupBy).
-
-    # Aggiungiamo il rank (F.rank() assegna un numero unico a ogni riga all'interno di ogni partizione)
-    df_ranked = df_with_nation.withColumn("rank", F.rank().over(window_spec))
-    
-    # 4. Filtriamo i top n
-    top_hotels = df_ranked.filter(F.col("rank") <= n)
-    
-    # Selezioniamo e ordiniamo per una visualizzazione pulita
-    result = top_hotels.select(
-        "Nation",
-        "Hotel_Name",
-        "Average_Score",
-        "Total_Number_of_Reviews",
-        "Hotel_Address",
-        "lat",
-        "lng"
-    ).orderBy("Nation", F.col("Average_Score").desc())
-    # Nota: orderBy() impone questo ordinamento: 
-    # 1. per Nation (in ordine alfabetico crescente)
-    # 2. per Average_Score (in ordine decrescente)
-    return result
-
 def analyze_review_trends(df, min_number_of_reviews = 30):
     """
     Analizza il trend temporale dei punteggi delle recensioni per ogni hotel.
@@ -417,6 +356,67 @@ def segment_hotels_kmeans(df, k=4, use_score=True, use_popularity=True, use_verb
     # Ritorniamo il dataframe con le predizioni e tutte le colonne originali
     return predictions
 
+def get_top_hotels_by_nation(df, n=10):
+    """
+    Raggruppa gli hotel per nazione e trova gli n migliori per ogni nazione
+    basandosi su un criterio di punteggio (default: Average_Score).
+    Args:
+        df: DataFrame PySpark con i dati degli hotel
+        n: Numero di hotel da mostrare per ogni nazione
+    Returns:
+        DataFrame PySpark con le colonne selezionate e i top n hotel per nazione
+    """
+    # 1. Deduplicazione per Hotel: Conserviamo una sola riga per hotel
+    # Nota: Hotel_Address, Average_Score e Total_Number_of_Reviews sono costanti per lo stesso Hotel_Name
+    unique_hotels_df = df.select(
+        "Hotel_Name", 
+        "Hotel_Address", 
+        "Average_Score", 
+        "Total_Number_of_Reviews",
+        F.when(F.col("lat") == "NA", None).otherwise(F.col("lat")).cast("double").alias("lat"),
+        F.when(F.col("lng") == "NA", None).otherwise(F.col("lng")).cast("double").alias("lng")
+    ).dropDuplicates(["Hotel_Name"])
+
+    # 2. Estrazione della Nazione (la nazione è l'ultima parola dell'indirizzo)
+    df_with_nation = unique_hotels_df.withColumn("Nation_Raw", F.element_at(F.split(F.col("Hotel_Address"), " "), -1))
+    # Nota: uso le funzioni native di Spark (F.split, F.element_at, etc.) perchè è molto più efficiente 
+    # rispetto all'uso delle funzioni built-in di Python (le funzioni di spark vengono eseguite direttamente nella JVM)
+    
+    # Correggiamo le nazioni multi-parole
+    df_with_nation = df_with_nation.withColumn(
+        "Nation", 
+        F.when(F.col("Nation_Raw") == "Kingdom", "United Kingdom")
+         .otherwise(F.col("Nation_Raw"))
+    )
+    
+    # 3. Ranking (Top N per Nazione)
+    # Definiamo una finestra partizionata per Nazione e ordinata per Average_Score decrescente
+    # Se due hotel hanno lo stesso punteggio, vince chi ha più recensioni (Total_Number_of_Reviews).
+    window_spec = Window.partitionBy("Nation").orderBy(F.col("Average_Score").desc(), F.col("Total_Number_of_Reviews").desc())
+    # Nota: una Window Function permette di eseguire calcoli su un gruppo di righe correlate alla riga corrente, 
+    # senza collassare le righe in una sola (come fa invece groupBy).
+
+    # Aggiungiamo il rank (F.rank() assegna un numero unico a ogni riga all'interno di ogni partizione)
+    df_ranked = df_with_nation.withColumn("rank", F.rank().over(window_spec))
+    
+    # 4. Filtriamo i top n
+    top_hotels = df_ranked.filter(F.col("rank") <= n)
+    
+    # Selezioniamo e ordiniamo per una visualizzazione pulita
+    result = top_hotels.select(
+        "Nation",
+        "Hotel_Name",
+        "Average_Score",
+        "Total_Number_of_Reviews",
+        "Hotel_Address",
+        "lat",
+        "lng"
+    ).orderBy("Nation", F.col("Average_Score").desc())
+    # Nota: orderBy() impone questo ordinamento: 
+    # 1. per Nation (in ordine alfabetico crescente)
+    # 2. per Average_Score (in ordine decrescente)
+    return result
+
 def compare_local_vs_tourist_reviews(df, min_reviews_per_group=10):
     """
     Confronta i punteggi dati dai locali (stessa nazione dell'hotel) vs turisti (nazione diversa).
@@ -600,4 +600,57 @@ def analyze_seasonal_preferences(df, min_reviews=10):
     ).drop("Nation_Raw")
 
     # Ordine per Score decrescente
+    return final_stats.orderBy(F.col("Avg_Score").desc())
+
+def analyze_stay_duration(df, min_reviews=10):
+    """
+    Analizza la relazione tra durata del soggiorno e punteggio.
+    Estrae il numero di notti dai tag (es. "Stayed 1 night") e raggruppa in categorie.
+
+    Args:
+        df: DataFrame PySpark
+        min_reviews: Minimo numero di recensioni per categoria/hotel
+    Returns:
+        DataFrame con statistiche per categoria di durata
+    """
+    
+    # 1. Estrazione Durata Soggiorno (Map Phase: da stringa (tag "Stayed X nights") -> numero di notti)
+
+    clean_tags = F.regexp_replace(F.col("Tags"), "[\\[\\]']", "") # Pulisce la stringa di tags eliminando parentesi quadre [ ] e apici '
+    splitted_tags = F.split(clean_tags, ",") # Divide la stringa di tags in singole stringhe ottenendo una colonna di tag singoli
+    # explode(splitted_tags) -> crea una riga per ogni tag (duplicando gli altri campi dalla riga originale corrispondente nel DataFrame)
+    exploded = df.withColumn("Single_Tag", F.explode(splitted_tags)) \
+                 .withColumn("Single_Tag", F.trim(F.col("Single_Tag"))) # trim rimuove spazi vuoti a inizio e fine di ogni tag
+
+    # Filtra le righe che contengono tag come "Stayed 1 night", "Stayed 10 nights", etc. usando la Regex: 'Stayed % night%'
+    # Il % finale serve per catturare sia night che nights
+    duration_tags = exploded.filter(F.col("Single_Tag").like("Stayed % night%")) 
+    
+    # Estrazione del numero con F.regexp_extract(column_name, pattern, groupIdx)
+    duration_df = duration_tags.withColumn(
+        "Nights", 
+        F.regexp_extract(F.col("Single_Tag"), r"Stayed (\d+) night", 1).cast("int") # in questo caso accetta sia night che nights
+    )
+    
+    # Filtra eventuali estrazioni fallite (null) o 0 notti
+    duration_df = duration_df.filter((F.col("Nights").isNotNull()) & (F.col("Nights") > 0))
+    
+    # 2. Categorizzazione (Binning) del tipo di soggiorno fra Short: 1-3, Medium: 4-7, Long: 8+
+    duration_df = duration_df.withColumn(
+        "Stay_Category",
+        F.when(F.col("Nights") <= 3, "Short Stay (1-3)")
+         .when((F.col("Nights") > 3) & (F.col("Nights") <= 7), "Medium Stay (4-7)")
+         .otherwise("Long Stay (8+)")
+    )
+    
+    # 3. Aggregazione per Hotel e Categoria di soggiorno
+    stats = duration_df.groupBy("Hotel_Name", "Stay_Category").agg(
+        F.avg("Reviewer_Score").alias("Avg_Score"),
+        F.count("Reviewer_Score").alias("Review_Count"),
+        F.avg("Nights").alias("Avg_Nights_Actual") # Utile per vedere se "Long" è 8 o 20
+    )
+    
+    # 4. Filtering
+    final_stats = stats.filter(F.col("Review_Count") >= min_reviews)
+    
     return final_stats.orderBy(F.col("Avg_Score").desc())
