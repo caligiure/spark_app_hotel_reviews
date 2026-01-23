@@ -13,16 +13,8 @@ from pyspark.sql import SparkSession
 import time
 from main import get_top_hotels
 from queries import get_top_hotels_by_nation, analyze_review_trends, analyze_tag_influence, analyze_nationality_bias, \
-    analyze_local_competitiveness, segment_hotels_kmeans, compare_local_vs_tourist_reviews, analyze_seasonal_preferences, analyze_stay_duration
-from ml_model import train_satisfaction_model
-from sentiment_analysis import (
-    fetch_hotel_reviews, 
-    enrich_reviews_with_llm,
-    get_negative_topic_frequency,
-    get_topic_trends,
-    get_topic_score_correlation,
-    get_discrepancies
-)
+    analyze_local_competitiveness, segment_hotels_kmeans, compare_local_vs_tourist_reviews, analyze_seasonal_preferences, \
+    analyze_stay_duration, analyze_reviewer_experience
 
 # Configurazione della pagina
 st.set_page_config(page_title="Hotel Reviews Analytics", layout="wide")
@@ -78,9 +70,7 @@ try:
             "Locals vs Tourists - Preferenze e distribuzione clienti": "local_vs_tourist",
             "Analisi Stagionale & Target": "seasonal_preferences",
             "Analisi Durata Soggiorno": "stay_duration",
-            "Top Hotels (Avg Score)": "top_hotels",
-            "Stima Soddisfazione (ML)": "ml_satisfaction",
-            "Sentiment Analysis (Local LLM)": "sentiment_analysis",
+            "Analisi Esperienza Recensore": "reviewer_experience",
         }
         selected_query = st.sidebar.radio("Scegli la query da eseguire:", list(query_options.keys()))
         
@@ -865,7 +855,7 @@ try:
             
             min_revs_stay = st.slider("Minimo recensioni per categoria/hotel", 5, 100, 20)
             
-            if st.button("Analizza Durata"):
+            if st.button("Analizza Soggiorni"):
                 with st.spinner("Estrazione durata dai tag e analisi..."):
                     stay_df = analyze_stay_duration(df, min_reviews=min_revs_stay) # da queries.py
                     pdf = stay_df.toPandas() # da Spark a Pandas per visualizzazione
@@ -901,7 +891,7 @@ try:
                             )
                         )
                         
-                        # Text for positive values
+                        # Text per valori positivi
                         text_pos = base.transform_filter(
                             alt.datum.Delta > 0
                         ).mark_text(
@@ -911,7 +901,7 @@ try:
                             text=alt.Text('Avg_Score', format='.3f')
                         )
                         
-                        # Text for negative (or zero) values
+                        # Text per valori negativi (o zero)
                         text_neg = base.transform_filter(
                             alt.datum.Delta <= 0
                         ).mark_text(
@@ -924,25 +914,20 @@ try:
                         st.altair_chart(bars + text_pos + text_neg, width='stretch')
                         
                         # 2. Top Hotels per Categoria
-                        col1, col2, col3 = st.columns(3)
+                        st.write("**🏆 Top Short Stays**")
+                        short_df = pdf[pdf['Stay_Category'] == "Short Stay (1-3)"].sort_values("Avg_Score", ascending=False).head(5)
+                        st.dataframe(short_df[['Hotel_Name', 'Avg_Score', 'Review_Count']].style.format("{:.2f}", subset=['Avg_Score']), width='stretch')
                         
-                        with col1:
-                            st.write("**🏆 Top Short Stays**")
-                            short_df = pdf[pdf['Stay_Category'] == "Short Stay (1-3)"].sort_values("Avg_Score", ascending=False).head(5)
-                            st.dataframe(short_df[['Hotel_Name', 'Avg_Score', 'Review_Count']].style.format("{:.2f}", subset=['Avg_Score']), width='stretch')
+                        st.write("**🏆 Top Medium Stays**")
+                        med_df = pdf[pdf['Stay_Category'] == "Medium Stay (4-7)"].sort_values("Avg_Score", ascending=False).head(5)
+                        st.dataframe(med_df[['Hotel_Name', 'Avg_Score', 'Review_Count']].style.format("{:.2f}", subset=['Avg_Score']), width='stretch')
+                        
+                        st.write("**🏆 Top Long Stays**")
+                        long_df = pdf[pdf['Stay_Category'] == "Long Stay (8+)"].sort_values("Avg_Score", ascending=False).head(5)
+                        st.dataframe(long_df[['Hotel_Name', 'Avg_Score', 'Review_Count']].style.format("{:.2f}", subset=['Avg_Score']), width='stretch')
                             
-                        with col2:
-                            st.write("**🏆 Top Medium Stays**")
-                            med_df = pdf[pdf['Stay_Category'] == "Medium Stay (4-7)"].sort_values("Avg_Score", ascending=False).head(5)
-                            st.dataframe(med_df[['Hotel_Name', 'Avg_Score', 'Review_Count']].style.format("{:.2f}", subset=['Avg_Score']), width='stretch')
-                            
-                        with col3:
-                            st.write("**🏆 Top Long Stays**")
-                            long_df = pdf[pdf['Stay_Category'] == "Long Stay (8+)"].sort_values("Avg_Score", ascending=False).head(5)
-                            st.dataframe(long_df[['Hotel_Name', 'Avg_Score', 'Review_Count']].style.format("{:.2f}", subset=['Avg_Score']), width='stretch')
-                            
-                        # 3. Scatter Plot Detailed
-                        st.subheader("Deep Dive: Performance Hotel")
+                        # 3. Scatter Plot Dettagliato
+                        st.subheader("Dettagli Performance Hotel")
                         st.write("Ogni punto è un hotel in una specifica categoria di durata.")
                         st.info("Nota: cliccando su un punto del grafico è possibile visualizzare le informazioni relative all'hotel.")
                         
@@ -957,154 +942,60 @@ try:
                     else:
                         st.warning("Nessun dato trovato con i filtri correnti.")
 
-        # Query: Top Hotels
-        elif query_options[selected_query] == "top_hotels":
-            num_results = st.number_input("Seleziona il numero di risultati da visualizzare:", min_value=1, max_value=100, value=10)
-            if st.button("Trova i migliori hotel"):
-                if num_results > 0 and num_results <= 100 and num_results.is_integer():
-                    st.write(f"##### Elenco dei migliori {num_results} hotel in base al punteggio medio ottenuto nelle recensioni dei clienti.")
-                    with st.spinner("Calcolo risultati in corso..."):
-                        result_df = get_top_hotels(df, num_results=num_results)
-                        # Converto il dataframe Spark in dataframe Pandas per visualizzare i risultati in Streamlit
-                        pandas_df = result_df.toPandas()
-                        st.dataframe(pandas_df, width='stretch')
-                        # Visualizzazione con Altair
-                        st.write("#### Grafico Hotel per Punteggio Medio")
-                        st.info("Nota: cliccando su un punto del grafico è possibile visualizzare le informazioni relative all'hotel.")
-                        chart = alt.Chart(pandas_df).mark_bar().encode(
-                            x=alt.X('Average_Score', title='Punteggio Medio', scale=alt.Scale(domain=[pandas_df["Average_Score"].min() - 0.5, 10])),
-                            y=alt.Y('Hotel_Name', sort='-x', title='Hotel'),
-                            color=alt.Color('Average_Score', scale=alt.Scale(scheme='viridis'), legend=None),
-                            tooltip=['Hotel_Name', 'Average_Score', 'Review_Count']
-                        ).interactive()
-                        st.altair_chart(chart, width='stretch')
-                else:
-                    st.error("Inserisci un numero valido di risultati.")
-
-        # Query: ML Satisfaction
-        elif query_options[selected_query] == "ml_satisfaction":
-            if st.button("Addestra Modello e Mostra Coefficienti"):
-                st.info("Addestramento modello di regressione lineare in corso...")
-                # Passiamo il dataframe Spark
-                model, rmse, r2 = train_satisfaction_model(df)
-                    
-                st.write(f"### Risultati Modello")
-                st.write(f"**RMSE (Root Mean Squared Error):** {rmse:.4f}")
-                st.write(f"**R2 (R-squared):** {r2:.4f}")
-                    
-                lr_model = model.stages[-1]
-                coeffs = lr_model.coefficients
-                intercept = lr_model.intercept
-                    
-                st.write("#### Coefficienti:")
-                st.write(f"- Intercetta: {intercept:.4f}")
-                    
-                feature_cols = [
-                    "Average_Score", 
-                    "Total_Number_of_Reviews", 
-                    "Review_Total_Negative_Word_Counts",
-                    "Review_Total_Positive_Word_Counts",
-                    "Total_Number_of_Reviews_Reviewer_Has_Given",
-                    "Additional_Number_of_Scoring"
-                ]
-                    
-                coeffs_data = {
-                    "Feature": feature_cols,
-                    "Coefficient": [float(c) for c in coeffs]
-                }
-                st.table(pd.DataFrame(coeffs_data))
-                    
-                    
-                st.success("Modello addestrato!")
-
-        # Query: Sentiment Analysis
-        elif query_options[selected_query] == "sentiment_analysis":
-            st.info("Questa funzionalità richiede **Ollama** installato in locale.")
-            # --- Configurazione ---
-            col1, col2 = st.columns(2)
-            with col1:
-                hotel_name = st.text_input("Inserisci nome Hotel", value="Ritz Paris")
-                model_name = st.selectbox("Modello Ollama", ["qwen2:0.5b", "tinyllama", "qwen2.5:1.5b", "phi3", "llama3"])
-            with col2:
-                # Limitiamo per evitare attese infinite in demo
-                max_reviews = st.number_input("Max recensioni da analizzare", value=30, min_value=1, max_value=200)
-            # --- Stato Sessione per Caching ---
-            if "enriched_df" not in st.session_state:
-                st.session_state["enriched_df"] = None
-            if "current_hotel" not in st.session_state:
-                st.session_state["current_hotel"] = ""
-            # --- Bottone "Prepara Dati" (Esegue LLM) ---
-            st.divider()
-            if st.button("🚀 1. Prepara/Aggiorna Dati (Esegui LLM)"):
-                with st.spinner(f"Scarico recensioni per '{hotel_name}' e avvio analisi con {model_name}..."):
-                    # 1. Fetch
-                    raw_pandas_df = fetch_hotel_reviews(df, hotel_name, limit=max_reviews)
-                    if raw_pandas_df.empty:
-                        st.error(f"Nessuna recensione trovata per '{hotel_name}'.")
-                    else:
-                        st.write(f"Trovate {len(raw_pandas_df)} recensioni. Analisi in corso...")
-                        # 2. Enrich
-                        enriched = enrich_reviews_with_llm(raw_pandas_df, model_name=model_name)
-                        # 3. Store in Session
-                        st.session_state["enriched_df"] = enriched
-                        st.session_state["current_hotel"] = hotel_name
-                        st.success("Analisi completata! Ora puoi eseguire le query qui sotto.")
+        # Query: Reviewer Experience
+        elif query_options[selected_query] == "reviewer_experience":
+            st.markdown("""
+            #### 🎓 L'Esperienza conta? Novizi vs Esperti
             
-            # --- Sezione Query Separate ---
-            if st.session_state["enriched_df"] is not None:
-                enriched_df = st.session_state["enriched_df"]
-                st.write(f"✅ Dati pronti per: **{st.session_state['current_hotel']}** ({len(enriched_df)} recensioni)")
-                
-                tab1, tab2, tab3 = st.tabs([
-                    "Parole Chiave Negative", 
-                    "Trend Temporali", 
-                    "Correlazione Voto"
-                ])
-                
-                with tab1:
-                    st.write("### Frequenza Problemi (Recensioni Negative)")
-                    if st.button("Esegui Query: Parole Chiave"):
-                        freq_df = get_negative_topic_frequency(enriched_df)
-                        if not freq_df.empty:
-                            st.bar_chart(freq_df.set_index("Topic"))
-                            st.dataframe(freq_df)
-                        else:
-                            st.info("Nessun topic negativo trovato.")
-
-                with tab2:
-                    st.write("### Trend dei Topic nel Tempo")
-                    if st.button("Esegui Query: Trend"):
-                        trends_df = get_topic_trends(enriched_df)
-                        if not trends_df.empty:
-                            st.line_chart(trends_df, x="Month_Year", y="Count", color="LLM_Topics")
-                            st.dataframe(trends_df)
-                        else:
-                            st.info("Dati insufficienti per i trend.")
-
-                with tab3:
-                    st.write("### Impatto dei Topic sul Voto")
-                    st.write("Quanto un topic alza o abbassa la media voti rispetto alla media dell'hotel?")
-                    if st.button("Esegui Query: Correlazione"):
-                        impact_df, avg_hotel = get_topic_score_correlation(enriched_df)
-                        if not impact_df.empty:
-                            st.metric("Media Voto Hotel", f"{avg_hotel:.2f}")
-                            
-                            # Chart
-                            c = alt.Chart(impact_df).mark_bar().encode(
-                                x='Impact:Q',
-                                y=alt.Y('LLM_Topics:N', sort='x'),
-                                color=alt.condition(
-                                    alt.datum.Impact > 0,
-                                    alt.value("green"),
-                                    alt.value("red")
-                                )
-                            )
-                            st.altair_chart(c, width='stretch')
-                            st.dataframe(impact_df)
-                        else:
-                            st.info("Nessun dato significativo.")
-            else:
-                st.info("👆 Clicca su 'Prepara Dati' per iniziare.")
+            Analizza se il punteggio delle recensioni degli hotel cambia in base all'esperienza dei recensori.
+            
+            I recensori sono considerati più o meno **esperti** in base al numero di recensioni scritte, venendo classificati nelle seguenti categorie:
+            
+            *   **Novice (< 5 recensioni)**: novizio, viaggiatore occasionale.
+            *   **Intermediate (5-25 recensioni)**: viaggiatore regolare.
+            *   **Expert (> 25 recensioni)**: critico o frequent flyer.
+            
+            Per ogni hotel, viene calcolato l'**Experience Gap (Expert - Novice)**, ovvero la differenza tra il punteggio medio assegnato dagli esperti e quello assegnato dai novizi:
+            *   Valore **Positivo**: gli esperti danno voti più alti dei novizi (è un buon segnale, perchè le recensioni dei viaggiatori esperti sono considerate più affidabili).
+            *   Valore **Negativo**: gli esperti sono più critici dei novizi (potrebbe essere indice di un hotel che delude le aspettative più elevate).
+            """)
+            
+            min_revs_level = st.slider("Minimo recensioni per livello di esperienza", 5, 100, 10, help="Gli hotel con poche recensioni non sono considerati per evitare distorsioni.")
+            
+            if st.button("Analizza Esperienza Recensori"):
+                with st.spinner("Classificazione recensori e calcolo gap..."):
+                    exp_df = analyze_reviewer_experience(df, min_reviews_per_level=min_revs_level)
+                    exp_pdf = exp_df.toPandas()
+                    
+                    if not exp_pdf.empty:
+                        # KPI (Key Performance Indicator)
+                        avg_gap = exp_pdf['Experience_Gap'].mean()
+                        st.metric("Gap Medio (Esperti - Novizi): se negativo, gli esperti sono mediamente più severi dei novizi", f"{avg_gap:+.2f}")
+                        
+                        st.subheader("🧐 I più criticati dagli Esperti (Gap Negativo)")
+                        critics = exp_pdf.sort_values("Experience_Gap").head(10)
+                        st.dataframe(critics[['Hotel_Name', 'Novice_Avg_Score', 'Intermediate_Avg_Score', 'Expert_Avg_Score', 'Experience_Gap', 'Total_Analyzed_Reviews', 'Novice_Count', 'Intermediate_Count', 'Expert_Count']].style.format("{:.2f}", subset=['Novice_Avg_Score', 'Intermediate_Avg_Score', 'Expert_Avg_Score', 'Experience_Gap']).background_gradient(subset=['Experience_Gap'], cmap='RdYlGn'), width='stretch')
+                        
+                        st.subheader("🤝 I più apprezzati dagli Esperti (Gap Positivo)")
+                        fans = exp_pdf.sort_values("Experience_Gap", ascending=False).head(10)
+                        st.dataframe(fans[['Hotel_Name', 'Novice_Avg_Score', 'Intermediate_Avg_Score', 'Expert_Avg_Score', 'Experience_Gap', 'Total_Analyzed_Reviews', 'Novice_Count', 'Intermediate_Count', 'Expert_Count']].style.format("{:.2f}", subset=['Novice_Avg_Score', 'Intermediate_Avg_Score', 'Expert_Avg_Score', 'Experience_Gap']).background_gradient(subset=['Experience_Gap'], cmap='RdYlGn'), width='stretch')
+                        
+                        st.subheader("Grafico: Novizi vs Esperti")
+                        st.write("Confronto voti: Novizi (X) vs Esperti (Y).")
+                        st.info("Nota: cliccando su un punto del grafico è possibile visualizzare le informazioni relative all'hotel.")
+                        
+                        chart = alt.Chart(exp_pdf).mark_circle(size=60).encode(
+                            x=alt.X('Novice_Avg_Score:Q', title='Voto Novizi', scale=alt.Scale(domain=[5, 10])),
+                            y=alt.Y('Expert_Avg_Score:Q', title='Voto Esperti', scale=alt.Scale(domain=[5, 10])),
+                            color=alt.Color('Experience_Gap:Q', scale=alt.Scale(scheme='redyellowgreen', domainMid=0), title='Gap (Expert-Novice)'),
+                            tooltip=['Hotel_Name', 'Novice_Avg_Score', 'Expert_Avg_Score', 'Experience_Gap', 'Total_Analyzed_Reviews']
+                        ).interactive()
+                        
+                        line = alt.Chart(pd.DataFrame({'x': [5, 10], 'y': [5, 10]})).mark_line(color='gray', strokeDash=[5, 5]).encode(x='x', y='y')
+                        st.altair_chart(chart + line, width='stretch')
+                        
+                    else:
+                        st.warning(f"Nessun hotel trovato con almeno {min_revs_level} recensioni per livello (Novice/Expert).")
 
     else:
         st.error("Impossibile caricare il dataset. Controlla che 'Hotel_Reviews.csv' sia nella cartella.")

@@ -654,3 +654,59 @@ def analyze_stay_duration(df, min_reviews=10):
     final_stats = stats.filter(F.col("Review_Count") >= min_reviews)
     
     return final_stats.orderBy(F.col("Avg_Score").desc())
+
+def analyze_reviewer_experience(df, min_reviews_per_level=5):
+    """
+    Analizza come cambia il voto in base all'esperienza del recensore.
+    Classifica i recensori in:
+    - Novice: < 5 recensioni totali
+    - Intermediate: 5 - 25 recensioni totali
+    - Expert: > 25 recensioni totali
+    
+    Args:
+        df: DataFrame PySpark
+        min_reviews_per_level: Minimo numero di recensioni PER LIVELLO per considerare l'hotel
+        
+    Returns:
+        DataFrame con Avg Score per ogni livello e il Gap (Expert - Novice).
+    """
+    
+    # 1. Definizione Categorie Esperienza (Map Phase)
+    # Usiamo il campo Total_Number_of_Reviews_Reviewer_Has_Given
+    df_exp = df.withColumn(
+        "Experience_Level",
+        F.when(F.col("Total_Number_of_Reviews_Reviewer_Has_Given") < 5, "Novice")
+         .when((F.col("Total_Number_of_Reviews_Reviewer_Has_Given") >= 5) & 
+               (F.col("Total_Number_of_Reviews_Reviewer_Has_Given") <= 25), "Intermediate")
+         .otherwise("Expert")
+    )
+    
+    # 2. Aggregazione (Reduce Phase)
+    # Pivot sui livelli di esperienza: per ogni hotel, per ogni livello di esperienza, calcola il punteggio medio e il numero di recensioni
+    stats = df_exp.groupBy("Hotel_Name").pivot("Experience_Level", ["Novice", "Intermediate", "Expert"]).agg(
+        F.avg("Reviewer_Score").alias("Avg_Score"), # alias fa diventare {Value}_{Alias} -> Expert_Avg_Score
+        F.count("Reviewer_Score").alias("Count") # alias fa diventare {Value}_{Alias} -> Expert_Count
+    )
+    
+    # 3. Filtering e Metriche
+    # Vogliamo hotel che abbiano un numero decente di recensioni sia da novizi che da esperti per un confronto sensato
+    final_stats = stats.filter(
+        (F.col("Novice_Count") >= min_reviews_per_level) & 
+        (F.col("Expert_Count") >= min_reviews_per_level)
+    ).fillna(0) # Riempie eventuali null
+    
+    # Calcolo Gap: Se positivo, gli esperti hanno votato più alto dei novizi.
+    # Se negativo, gli esperti sono più critici.
+    final_stats = final_stats.withColumn(
+        "Experience_Gap",
+        F.col("Expert_Avg_Score") - F.col("Novice_Avg_Score")
+    )
+    
+    # Aggiungiamo Total Reviews (somma dei count)
+    final_stats = final_stats.withColumn(
+        "Total_Analyzed_Reviews",
+        F.col("Novice_Count") + F.col("Intermediate_Count") + F.col("Expert_Count")
+    )
+    
+    # Ordiniamo per il gap più negativo (gli hotel che deludono di più gli esperti rispetto ai novizi)
+    return final_stats.orderBy(F.col("Experience_Gap"))
