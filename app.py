@@ -1,20 +1,21 @@
 import sys
 import os
-
-# Fix per "Python worker failed to connect back"
-os.environ['PYSPARK_PYTHON'] = sys.executable
-os.environ['PYSPARK_DRIVER_PYTHON'] = sys.executable
-
 import streamlit as st
 import pandas as pd
 import altair as alt
 import pydeck as pdk
 from pyspark.sql import SparkSession
 import time
-from main import get_top_hotels
 from queries import get_top_hotels_by_nation, analyze_review_trends, analyze_tag_influence, analyze_nationality_bias, \
     analyze_local_competitiveness, segment_hotels_kmeans, compare_local_vs_tourist_reviews, analyze_seasonal_preferences, \
     analyze_stay_duration, analyze_reviewer_experience
+
+# Fix per "Python worker failed to connect back"
+os.environ['PYSPARK_PYTHON'] = sys.executable # impone ai worker di Spark di utilizzare lo stesso interprete Python utilizzato da questo script
+os.environ['PYSPARK_DRIVER_PYTHON'] = sys.executable # impone al driver di Spark di utilizzare lo stesso interprete Python utilizzato da questo script
+# Senza questa imposizione, Spark potrebbe tentare di avviare i worker usando un percorso Python di default o errato (es. un'altra versione installata nel sistema)
+# Se il "Driver" e i "Worker" non usano esattamente lo stesso interprete Python, non riescono a comunicare tra loro.
+# Queste due righe forzano l'uso dello stesso eseguibile per tutti i componenti di Spark (in questo caso lo stesso interprete Python utilizzato dall'ambiente virtuale corrente).
 
 # Configurazione della pagina
 st.set_page_config(page_title="Hotel Reviews Analytics", layout="wide")
