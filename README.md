@@ -52,79 +52,18 @@ Per eseguire Spark su Windows senza errori, è necessario configurare `winutils.
     *   Modifica la variabile `Path`:
         *   Aggiungi `%HADOOP_HOME%\bin`.
 
-## Esecuzione con interfaccia grafica
+## Avvio dell'applicazione
 
-1. Avvia run_gui.bat
+* Esegui il file RUN_APP_Hotel_Reviews.bat
+
+Oppure:
+
+* Esegui il comando: python -m streamlit run app.py
 
 ### Cosa fa lo script (app.py) di avvio con interfaccia grafica
 
-1. TO-DO
-
-## Alternativa: esecuzione da terminale (solo per test)
-
-1.  Apri il terminale nella cartella del progetto.
-2.  Esegui lo script:
-        python main.py
-
-### Cosa fa lo script (main.py) del test da terminale
-
-1.  Inizializza una `SparkSession`.
-2.  Carica il file `Hotel_Reviews.csv`.
-3.  Calcola la media del `Reviewer_Score` per ogni `Hotel_Name`.
-4.  Filtra gli hotel con meno di 20 recensioni.
-5.  Mostra i primi 10 hotel per punteggio medio.
-
+TO-DO
    
 # Elenco delle query
 
-## get_top_hotels_by_nation (app.py)
-Questa query ha l'obiettivo di **trovare i top hotel per ogni nazione**.
-In particolare, la query restituisce i top hotel per ogni nazione, basandosi sul punteggio medio che ogni hotel ha ottenuto nelle valutazioni e sul numero di recensioni che ha ricevuto.
-
-## query tasso di crescita/decrescita dei punteggi
-
-## 
-
-## query con map reduce
-
-## regressione per scoprire quali termini influenzano di più le recensioni
-
-## clustering degli hotel
-
-## Estimate future customer satisfaction (query di predizione, ml_model.py)
-Questa query ha l'obiettivo di **predire il futuro grado di soddisfazione dei clienti di ogni hotel**, basandosi sul punteggio medio che ogni hotel ha ottenuto nelle valutazioni e sul numero di recensioni che ha ricevuto.
-In particolare, la query predice il **Reviewer_Score** della prossima valutazione di ogni hotel, basandosi sul suo *Average_Score* e sul suo *Total_Number_of_Reviews*.
-
-La query implementa una **Regressione Lineare** grazie all'uso di **Spark MLlib**, realizzando un modello di **machine learning** addestrato sul dataset di recensioni di hotel. Poichè il dataset è statico, non è possibile addestrare il modello in tempo reale, ma è possibile addestrare il modello una volta e poi utilizzarlo per fare predizioni in tempo reale.
-
-L'addestramento del modello avviene nel file `ml_model.py`, con la seguente logica:
-1. Seleziona le colonne `Average_Score`, `Total_Number_of_Reviews` e `Reviewer_Score` (rimuovendo le righe con valori nulli).
-2. Combina le colonne selezionate in una singola colonna di input per il modello, chiamata `features`.
-3. Divide i dati in training e test set (80% per training, 20% per test).
-4. Inizializza un modello di Regressione Lineare e lo addestra sul training set.
-5. TO-DO: spiega come funziona la pipeline e come funziona il modello di Regressione Lineare.
-6. TO-DO: spiega come funziona predictions e come funziona evaluator.
-7. TO-DO: spiega cosa sono RMSE e R2.
-8. TO-DO: spiega cosa sono coefficients e intercept.
-9. Spiega cosa restiuisce il modello addestrato.
-
-Output:
-Model Trained. RMSE: 1.5239, R2: 0.1335                                                      
-Coefficients: [1.083499728270512,-5.373252253753084e-06]
-Intercept: -0.687615263580646
-
-Interpretazione dei risultati:
-1. L'errore medio (RMSE = 1.52):
-    * Questo è l'indicatore più diretto della precisione: se il modello prevede che un utente darà voto 9.0, il voto reale sarà probabilmente compreso tra 7.5 e 10. (cioè ha un margine di errore medio di circa 1.5 punti).
-    * Su una scala di voti da 1 a 10, sbagliare di 1.5 punti è un errore significativo, la stima è molto "larga".
-2. La capacità di spiegazione (R2 = 0.13):
-    * Questo valore (13%) ci dice che il modello capisce solo una piccola parte del comportamento dei clienti.
-    * Significa che l'87% del voto di un cliente dipende da fattori che il modello non conosce (es. pulizia della camera specifica, cortesia dello staff in quel momento, umore del cliente), e non dalla **media storica dell'hotel**.
-
-In sintesi: Il modello può dare una stima del futuro grado di soddisfazione dei clienti di ogni hotel, ma questa stima sarà quasi sempre molto vicina alla media storica dell'hotel.
-
-3. ## Sentiment Analysis
-Questa query ha l'obiettivo di **analizzare il sentimento delle recensioni di ogni hotel**.
-In particolare, la query analizza le recensioni di ogni hotel e restituisce il **sentimento** e le **topic** (argomenti) menzionati.
-
-4. ## Individua gli hotel con meno recensioni e mostra il punteggio medio
+TO-DO
