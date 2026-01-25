@@ -1,0 +1,167 @@
+\documentclass[11pt,a4paper]{article}
+\usepackage[utf8]{inputenc}
+\usepackage[italian]{babel}
+\usepackage{geometry}
+\usepackage{hyperref}
+\usepackage{listings}
+\usepackage{color}
+\usepackage{graphicx}
+
+\geometry{a4paper, margin=2.5cm}
+
+\title{\textbf{Relazione Progetto Big Data: Hotel Reviews Analytics}}
+\author{Giuseppe Pasquale Caligiure - Mat. 280867}
+\date{2026}
+
+\begin{document}
+
+\maketitle
+\tableofcontents
+\newpage
+
+\section{Presentazione del Progetto}
+
+\subsection{Obiettivi Realizzati}
+Il progetto ``Hotel Reviews Analytics'' ha l'obiettivo di analizzare un dataset massivo di recensioni alberghiere per estrarre insight significativi utilizzando tecnologie Big Data. Attraverso l'elaborazione distribuita, sono stati realizzati diversi moduli di analisi che coprono aspetti temporali, testuali, geospaziali e comportamentali. Gli obiettivi principali raggiunti includono:
+\begin{itemize}
+    \item Identificazione dei trend di gradimento degli hotel nel tempo.
+    \item Analisi dell'influenza di specifici tag (caratteristiche del soggiorno) sul punteggio finale.
+    \item Segmentazione geografica e analisi della competitività locale.
+    \item Profilazione degli hotel tramite algoritmi di Machine Learning (Clustering).
+    \item Studio delle preferenze in base alla nazionalità e tipologia di viaggiatore.
+\end{itemize}
+
+\subsection{Tecnologie Utilizzate}
+Il progetto è stato sviluppato utilizzando uno stack tecnologico moderno orientato all'analisi dati su scala:
+\begin{itemize}
+    \item \textbf{Linguaggio}: Python 3.11.
+    \item \textbf{Core Computing}: \textbf{Apache Spark} (PySpark) per l'elaborazione parallela e distribuita dei dati. Utilizzo intensivo di DataFrame API, Spark SQL, Window Functions e User Defined Functions (UDF).
+    \item \textbf{Machine Learning}: \textbf{Spark MLlib} per operazioni di featurizzazione e clustering (K-Means) e \textbf{Scikit-learn} per regressioni lineari specifiche all'interno di UDF pandas.
+    \item \textbf{Frontend}: \textbf{Streamlit} per la creazione di una web application interattiva che permette all'utente di eseguire query e filtrare risultati.
+    \item \textbf{Visualizzazione}: \textbf{Altair} e \textbf{PyDeck} per la creazione di grafici interattivi e mappe geospaziali.
+    \item \textbf{Gestione Dipendenze Windows}: Winutils e Hadoop binaries per l'esecuzione locale su ambiente Windows.
+\end{itemize}
+
+\subsection{Architettura Frontend/Backend}
+L'applicazione segue una logica semi-disaccoppiata:
+\begin{itemize}
+    \item \textbf{Backend (Spark)}: Il file \texttt{queries.py} contiene la logica di business. Ogni funzione di analisi accetta un DataFrame Spark in input e restituisce un DataFrame Spark trasformato con i risultati. Questo livello gestisce la complessità dell'elaborazione distribuita.
+    \item \textbf{Frontend (Streamlit)}: Il file \texttt{app.py} gestisce l'interfaccia utente. All'avvio inizializza una \texttt{SparkSession} (cachata per efficienza) e carica il dataset. Quando l'utente seleziona un'analisi, il frontend invoca la funzione corrispondente dal backend, converte i risultati aggregati (di dimensioni ridotte) in Pandas DataFrame e li visualizza tramite grafici e tabelle.
+\end{itemize}
+
+\subsection{Logica di Funzionamento e Requisiti}
+L'utente avvia l'applicazione tramite script batch o comando Streamlit. Dopo il caricamento iniziale del dataset in memoria (DataFrame Spark), tramite una sidebar laterale è possibile selezionare una delle query disponibili. Ogni query espone parametri specifici (es. numero minimo di recensioni, raggio in km) modificabili tramite slider o input box. L'esecuzione avviene on-demand sfruttando il motore Spark.
+
+\section{Descrizione del Dataset Hotel\_Reviews}
+Il dataset utilizzato è \texttt{Hotel\_Reviews.csv}, un archivio contenente recensioni di hotel di lusso in Europa.
+
+\begin{itemize}
+    \item \textbf{Dimensione File}: Circa 238 MB.
+    \item \textbf{Numero di Righe}: Oltre 515.000 recensioni.
+\end{itemize}
+
+\subsection{Descrizione dei Campi}
+\begin{itemize}
+    \item \texttt{Hotel\_Address}: Indirizzo fisico dell'hotel.
+    \item \texttt{Additional\_Number\_of\_Scoring}: Metrica di scoring aggiuntiva.
+    \item \texttt{Review\_Date}: Data in cui è stata rilasciata la recensione.
+    \item \texttt{Average\_Score}: Punteggio medio storico dell'hotel.
+    \item \texttt{Hotel\_Name}: Nome della struttura.
+    \item \texttt{Reviewer\_Nationality}: Nazionalità dell'utente che ha lasciato la recensione.
+    \item \texttt{Negative\_Review}: Testo del commento negativo ("No Negative" se assente).
+    \item \texttt{Review\_Total\_Negative\_Word\_Counts}: Conteggio parole commento negativo.
+    \item \texttt{Total\_Number\_of\_Reviews}: Totale recensioni ricevute dall'hotel.
+    \item \texttt{Positive\_Review}: Testo del commento positivo ("No Positive" se assente).
+    \item \texttt{Review\_Total\_Positive\_Word\_Counts}: Conteggio parole commento positivo.
+    \item \texttt{Total\_Number\_of\_Reviews\_Reviewer\_Has\_Given}: Storico recensioni dell'utente.
+    \item \texttt{Reviewer\_Score}: Voto assegnato dal recensore nella specifica istanza.
+    \item \texttt{Tags}: Lista di stringhe che descrivono il soggiorno (es. "Leisure trip", "Couple", "Stayed 2 nights").
+    \item \texttt{days\_since\_review}: Giorni trascorsi dallo scraping.
+    \item \texttt{lat} / \texttt{lng}: Coordinate geografiche (Latitudine/Longitudine).
+\end{itemize}
+
+\section{Descrizione delle Query Implementate}
+
+\subsection{1. Top Hotel per Nazione}
+\textbf{Obiettivo}: Identificare le eccellenze alberghiere suddivise per paese. \\
+\textbf{Logica}: La query estrae la nazione dall'indirizzo dell'hotel, raggruppa le strutture per nazione e le ordina in base al punteggio medio (\texttt{Average\_Score}) e al numero di recensioni (come tie-breaker). \\
+\textbf{Tecnologie}: Spark SQL Functions, Window Functions (per il ranking). \\
+\textbf{Risultati}: Lista dei top N hotel per ogni nazione presente nel dataset (UK, France, Italy, etc.). \\
+\textbf{Casi d'uso}: Utenti che cercano i migliori hotel assoluti in una specifica destinazione turistica.
+
+\subsection{2. Trend Temporale delle Recensioni}
+\textbf{Obiettivo}: Capire se un hotel sta migliorando o peggiorando nel tempo. \\
+\textbf{Logica}: Le recensioni vengono raggruppate per hotel e ordinate cronologicamente. Viene applicata una regressione lineare (score vs tempo) per calcolare la pendenza (slope) del trend. \\
+\textbf{Tecnologie}: Pandas UDF (User Defined Function) per parallelizzare l'esecuzione di \texttt{scikit-learn LinearRegression} su ogni gruppo di hotel distribuito nei nodi Spark. \\
+\textbf{Risultati}: Coefficiente di trend per ogni hotel. Slope positivo indica miglioramento, negativo peggioramento. \\
+\textbf{Casi d'uso}: Identificare "stelle nascenti" o hotel decadenti nonostante un alto punteggio medio storico.
+
+\subsection{3. Analisi Influenza Tag (MapReduce)}
+\textbf{Obiettivo}: Determinare quali fattori (es. "Single Room", "No Window") impattano positivamente o negativamente sul voto. \\
+\textbf{Logica}: Segue il paradigma MapReduce. Fase Map: "esplosione" della stringa dei tag in righe singole. Fase Reduce: aggregazione per singolo tag calcolando la media dei voti delle recensioni in cui appare e lo scostamento dalla media globale. \\
+\textbf{Tecnologie}: \texttt{explode}, \texttt{groupBy}, aggregazioni statistiche. \\
+\textbf{Risultati}: Classifica dei tag con il maggiore impatto positivo e negativo (Impact Score) e relativo indice di affidabilità. \\
+\textbf{Casi d'uso}: Gestori hotel che vogliono capire quali caratteristiche sono più apprezzate o criticate.
+
+\subsection{4. Local Competitiveness (Analisi Geospaziale)}
+\textbf{Obiettivo}: Confrontare le performance di un hotel rispetto ai suoi diretti concorrenti geografici. \\
+\textbf{Logica}: Esegue un self-join del dataset basato sulla distanza geografica (Formula di Haversine). Ogni hotel viene confrontato con tutti gli altri hotel entro un raggio $K$ km. Viene calcolato il delta tra il punteggio dell'hotel e la media del vicinato. \\
+\textbf{Tecnologie}: Join cartesiano ottimizzato con filtri geospaziali, funzioni trigonometriche Spark. \\
+\textbf{Risultati}: Identificazione di "Local Gems" (punteggio alto in zona mediocre) e "Underperformers". \\
+\textbf{Casi d'uso}: Analisi di mercato competitiva per area geografica.
+
+\subsection{5. Segmentazione Hotel (K-Means Clustering)}
+\textbf{Obiettivo}: Raggruppare gli hotel in cluster omogenei basati su caratteristiche multidimensionali. \\
+\textbf{Logica}: Vengono estratte feature come Punteggio, Popolarità (numero recensioni), Verbosità delle recensioni e Bias di nazionalità. I dati vengono normalizzati e processati dall'algoritmo K-Means. \\
+\textbf{Tecnologie}: \texttt{Spark MLlib} (VectorAssembler, StandardScaler, KMeans pipeline). \\
+\textbf{Risultati}: Assegnazione di ogni hotel a un cluster (es. "Hotel Popolari di Lusso", "Hotel Economici di Nicchia"). \\
+\textbf{Casi d'uso}: Segmentazione di marketing, raccomandazioni di hotel simili.
+
+\subsection{6. Bias Nazionalità Recensore}
+\textbf{Obiettivo}: Capire se certe nazionalità tendono a dare voti più alti o bassi rispetto alla media. \\
+\textbf{Logica}: Raggruppamento per \texttt{Reviewer\_Nationality} e calcolo della media voti e deviazione standard. \\
+\textbf{Tecnologie}: Aggregazioni Spark standard. \\
+\textbf{Risultati}: Profilo di voto per nazione (es. "Gli utenti da X tendono a votare basso"). \\
+\textbf{Casi d'uso}: Normalizzazione dei voti in piattaforme internazionali.
+
+\subsection{7. Locali vs Turisti}
+\textbf{Obiettivo}: Analizzare la differenza di percezione tra chi visita il proprio paese (Local) e chi viene dall'estero (Tourist). \\
+\textbf{Logica}: Confronto tra la nazione dell'hotel e la nazione del recensore. Calcolo separato delle medie per i due gruppi. \\
+\textbf{Tecnologie}: Conditional Aggregation. \\
+\textbf{Risultati}: Identificazione di "Trappole per turisti" (voti turisti $>$ locali) o "Preferiti dai locali". \\
+\textbf{Casi d'uso}: Consigli di viaggio autentici basati sulle preferenze dei locali.
+
+\subsection{8. Preferenze Stagionali}
+\textbf{Obiettivo}: Analizzare come varia il gradimento in base alla stagione e al tipo di viaggio (Leisure/Business). \\
+\textbf{Logica}: Estrazione del mese dalla data recensione per determinare la stagione. Parsing dei tag per identificare il tipo di viaggio. Aggregazione combinata. \\
+\textbf{Tecnologie}: Date functions, String matching su tags. \\
+\textbf{Risultati}: Performance degli hotel in specifiche stagioni (es. hotel ottimi per l'estate ma carenti in inverno). \\
+\textbf{Casi d'uso}: Pianificazione viaggi in base al periodo.
+
+\subsection{9. Analisi Durata Soggiorno}
+\textbf{Obiettivo}: Correlare la durata del soggiorno al livello di soddisfazione. \\
+\textbf{Logica}: Utilizzo di Regular Expressions per estrarre il numero di notti dal campo \texttt{Tags} (es. "Stayed 3 nights"). Categorizzazione in Short, Medium, Long stay e calcolo media voti. \\
+\textbf{Tecnologie}: \texttt{regexp\_extract}, conditional logic (\texttt{when/otherwise}). \\
+\textbf{Risultati}: Statistiche che mostrano se i soggiorni lunghi tendono ad avere recensioni peggiori o migliori. \\
+\textbf{Casi d'uso}: Ottimizzazione offerte per soggiorni lunghi/corti.
+
+\subsection{10. Esperienza del Recensore}
+\textbf{Obiettivo}: Valutare se i recensori esperti sono più critici dei novizi. \\
+\textbf{Logica}: Segmentazione dei recensori in base al campo \texttt{Total\_Number\_of\_Reviews\_Reviewer\_Has\_Given} (Novice, Intermediate, Expert). Confronto delle distribuzioni dei voti. \\
+\textbf{Tecnologie}: Bucketizer o logica condizionale personalizzata. \\
+\textbf{Risultati}: Analisi della severità del voto in funzione dell'esperienza. \\
+\textbf{Casi d'uso}: Ponderazione del peso delle recensioni in un sistema di ranking avanzato.
+
+\section{Conclusioni Finali}
+Il progetto ha dimostrato con successo come l'utilizzo di \textbf{Spark} permetta di effettuare analisi complesse e multidimensionali su un dataset di grandi dimensioni con tempi di risposta contenuti. L'architettura implementata garantisce scalabilità orizzontale, potendo gestire volumi di dati ben superiori a quello attuale senza modifiche al codice.
+
+\textbf{Obiettivi Soddisfatti}: Tutti i requisiti di analisi descrittiva, diagnostica e predittiva (clustering/trend) sono stati implementati. L'integrazione con Streamlit rende i risultati accessibili e navigabili.
+
+\textbf{Possibili Sviluppi Futuri}:
+\begin{itemize}
+    \item \textbf{Analisi del Testo Avanzata}: Implementazione di modelli NLP (es. BERT) per Sentiment Analysis granulare sulle recensioni testuali, andando oltre il semplice voto numerico.
+    \item \textbf{Streaming}: Integrazione con Spark Structured Streaming per elaborare recensioni in tempo reale.
+    \item \textbf{Raccomandation System}: Sviluppo di un motore di raccomandazione collaborativo basato sulla similarità utente-utente trovata nel cluster analysis.
+\end{itemize}
+
+\end{document}
