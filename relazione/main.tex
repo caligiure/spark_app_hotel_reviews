@@ -9,7 +9,8 @@
 
 \geometry{a4paper, margin=2.5cm}
 
-\title{\textbf{Relazione Progetto Big Data: Hotel Reviews Analytics}}
+\title{\textbf{Relazione Big Data \\
+                Progetto n. 9: Hotel Reviews}}
 \author{Giuseppe Pasquale Caligiure - Mat. 280867}
 \date{2026}
 
@@ -19,10 +20,11 @@
 \tableofcontents
 \newpage
 
-\section{Presentazione del Progetto}
+\section{Presentazione del Progetto} 
 
-\subsection{Obiettivi Realizzati}
-Il progetto ``Hotel Reviews Analytics'' ha l'obiettivo di analizzare un dataset massivo di recensioni alberghiere per estrarre insight significativi utilizzando tecnologie Big Data. Attraverso l'elaborazione distribuita, sono stati realizzati diversi moduli di analisi che coprono aspetti temporali, testuali, geospaziali e comportamentali. Gli obiettivi principali raggiunti includono:
+\subsection{Contesto di lavoro e obiettivi Realizzati}
+Il presente progetto è stato realizzato lavorando sul dataset ``Hotel Reviews'', contenente oltre 515.000 recensioni di alberghi di lusso europei. L'applicativo realizzato consente di effettuare interrogazioni aggregate sul dataset, con l'obiettivo di estrarre insight significativi dai dati.
+Sfruttando le potenzialità di elaborazione distribuita offerte dal framework Spark, sono stati realizzati diversi moduli di analisi che consentono di rilevare aspetti temporali, testuali, geospaziali e comportamentali nelle recensioni del dataset. Gli obiettivi principali raggiunti includono:
 \begin{itemize}
     \item Identificazione dei trend di gradimento degli hotel nel tempo.
     \item Analisi dell'influenza di specifici tag (caratteristiche del soggiorno) sul punteggio finale.
@@ -31,41 +33,52 @@ Il progetto ``Hotel Reviews Analytics'' ha l'obiettivo di analizzare un dataset 
     \item Studio delle preferenze in base alla nazionalità e tipologia di viaggiatore.
 \end{itemize}
 
-\subsection{Tecnologie Utilizzate}
-Il progetto è stato sviluppato utilizzando uno stack tecnologico moderno orientato all'analisi dati su scala:
-\begin{itemize}
-    \item \textbf{Linguaggio}: Python 3.11.
-    \item \textbf{Core Computing}: \textbf{Apache Spark} (PySpark) per l'elaborazione parallela e distribuita dei dati. Utilizzo intensivo di DataFrame API, Spark SQL, Window Functions e User Defined Functions (UDF).
-    \item \textbf{Machine Learning}: \textbf{Spark MLlib} per operazioni di featurizzazione e clustering (K-Means) e \textbf{Scikit-learn} per regressioni lineari specifiche all'interno di UDF pandas.
-    \item \textbf{Frontend}: \textbf{Streamlit} per la creazione di una web application interattiva che permette all'utente di eseguire query e filtrare risultati.
-    \item \textbf{Visualizzazione}: \textbf{Altair} e \textbf{PyDeck} per la creazione di grafici interattivi e mappe geospaziali.
-    \item \textbf{Gestione Dipendenze Windows}: Winutils e Hadoop binaries per l'esecuzione locale su ambiente Windows.
-\end{itemize}
-
 \subsection{Architettura Frontend/Backend}
-L'applicazione segue una logica semi-disaccoppiata:
+L'applicazione è stata realizzata seguendo una logica Frontend/Backend:
 \begin{itemize}
-    \item \textbf{Backend (Spark)}: Il file \texttt{queries.py} contiene la logica di business. Ogni funzione di analisi accetta un DataFrame Spark in input e restituisce un DataFrame Spark trasformato con i risultati. Questo livello gestisce la complessità dell'elaborazione distribuita.
+    \item \textbf{Backend (Spark)}: Il file \texttt{queries.py} contiene la logica di lavoro. Ogni funzione implementa una diversa analisi dei dati, ma tutte rispettano il seguente schema: accetta un DataFrame Spark in input e restituisce un DataFrame Spark trasformato con i risultati.
     \item \textbf{Frontend (Streamlit)}: Il file \texttt{app.py} gestisce l'interfaccia utente. All'avvio inizializza una \texttt{SparkSession} (cachata per efficienza) e carica il dataset. Quando l'utente seleziona un'analisi, il frontend invoca la funzione corrispondente dal backend, converte i risultati aggregati (di dimensioni ridotte) in Pandas DataFrame e li visualizza tramite grafici e tabelle.
 \end{itemize}
 
-\subsection{Logica di Funzionamento e Requisiti}
-L'utente avvia l'applicazione tramite script batch o comando Streamlit. Dopo il caricamento iniziale del dataset in memoria (DataFrame Spark), tramite una sidebar laterale è possibile selezionare una delle query disponibili. Ogni query espone parametri specifici (es. numero minimo di recensioni, raggio in km) modificabili tramite slider o input box. L'esecuzione avviene on-demand sfruttando il motore Spark.
-
-\section{Descrizione del Dataset Hotel\_Reviews}
-Il dataset utilizzato è \texttt{Hotel\_Reviews.csv}, un archivio contenente recensioni di hotel di lusso in Europa.
-
+\subsection{Tecnologie Utilizzate e Requisti}
+Il progetto è stato sviluppato in Python, utilizzando il framework di Spark per eseguire interrogazioni in maniera scalabile e distribuita. 
 \begin{itemize}
-    \item \textbf{Dimensione File}: Circa 238 MB.
-    \item \textbf{Numero di Righe}: Oltre 515.000 recensioni.
+    \item \textbf{Linguaggio}: Python 3.11. (il progetto è stato testato con Python 3.11.9)
+    \item \textbf{Backend:} \textbf{Apache Spark} (PySpark) per l'elaborazione parallela e distribuita dei dati. In particolare sono stati utilizzati DataFrame Spark, Spark SQL, Window Functions e User Defined Functions (UDF).
+    \item \textbf{Machine Learning}: \textbf{Spark MLlib} per operazioni di clustering (K-Means) e \textbf{Scikit-learn} per regressioni lineari all'interno di UDF pandas.
+    \item \textbf{Frontend}: \textbf{Streamlit} per la creazione di una web-app interattiva che permette all'utente di eseguire query e filtrare risultati.
+    \item \textbf{Visualizzazione}: \textbf{Altair}, \textbf{PyDeck} e \textbf{Pandas} per la creazione di grafici interattivi e mappe geospaziali.
+    \item \textbf{Gestione Dipendenze Windows}: Winutils e Hadoop per l'esecuzione locale su ambiente Windows.
 \end{itemize}
 
-\subsection{Descrizione dei Campi}
+\subsection{Logica di Funzionamento}
+\begin{enumerate}
+    \item L'utente avvia l'applicazione tramite script batch (\texttt{RUN\_APP\_Hotel\_Reviews.bat}) o comando Streamlit (\texttt{python -m streamlit run app.py}).
+    \item L'app si avvia automaticamente in una finestra del browser predefinito del dispositivo in uso, ma è anche raggiungibile da altri dispositivi (pc, tablet, smartphone) collegati sulla stessa rete locale, tramite gli indirizzi specificati nel terminale (Figura \ref{fig:indirizzi}).
+    \begin{figure}[h]
+        \centering
+        \includegraphics[width=0.5\linewidth]{imgs/indirizzi.png}
+        \caption{URL della web-app}
+        \label{fig:indirizzi}
+    \end{figure}
+    \item Dopo il caricamento iniziale del dataset in memoria (DataFrame Spark), tramite una sidebar laterale è possibile selezionare una delle query disponibili.
+    \item Ogni query espone parametri specifici (es. numero minimo di recensioni, raggio in km) modificabili tramite slider o input box. L'esecuzione della query avviene on-demand sfruttando il motore Spark. I risultati vengono visualizzati in-app tramite grafici, tabelle e mappe interattive.
+\end{enumerate}
+
+\section{Descrizione del Dataset Hotel\_Reviews}
+Il dataset utilizzato è \texttt{Hotel\_Reviews.csv} (reperibile su: \url{https://www.kaggle.com/datasets/jiashenliu/515k-hotel-reviews-data-in-europe}. Questo archivio contiene oltre 515.000 recensioni di hotel di lusso in Europa, raccolte dal sito Booking.com, dove sono pubblicamente accessibili. Ogni riga del dataset corrisponde ad una recensione e presenta 17 campi che descrivono sia le caratteristiche dell'hotel, sia l'esperienza del cliente.
+
 \begin{itemize}
-    \item \texttt{Hotel\_Address}: Indirizzo fisico dell'hotel.
-    \item \texttt{Additional\_Number\_of\_Scoring}: Metrica di scoring aggiuntiva.
+    \item \textbf{Dimensione File}: Circa 238 MB
+    \item \textbf{Numero di Righe}: 515.738
+\end{itemize}
+
+\subsection{Campi del Dataset}
+\begin{itemize}
+    \item \texttt{Hotel\_Address}: Indirizzo dell'hotel.
+    \item \texttt{Additional\_Number\_of\_Scoring}: Numero di valutazioni aggiuntive (clienti che hanno lasciato solo una valutazione numerica dell'hotel, senza recensione).
     \item \texttt{Review\_Date}: Data in cui è stata rilasciata la recensione.
-    \item \texttt{Average\_Score}: Punteggio medio storico dell'hotel.
+    \item \texttt{Average\_Score}: Punteggio medio storico dell'hotel (calcolato su tutte le recensioni ricevute dall'hotel nell'ultimo anno).
     \item \texttt{Hotel\_Name}: Nome della struttura.
     \item \texttt{Reviewer\_Nationality}: Nazionalità dell'utente che ha lasciato la recensione.
     \item \texttt{Negative\_Review}: Testo del commento negativo ("No Negative" se assente).
@@ -73,11 +86,12 @@ Il dataset utilizzato è \texttt{Hotel\_Reviews.csv}, un archivio contenente rec
     \item \texttt{Total\_Number\_of\_Reviews}: Totale recensioni ricevute dall'hotel.
     \item \texttt{Positive\_Review}: Testo del commento positivo ("No Positive" se assente).
     \item \texttt{Review\_Total\_Positive\_Word\_Counts}: Conteggio parole commento positivo.
-    \item \texttt{Total\_Number\_of\_Reviews\_Reviewer\_Has\_Given}: Storico recensioni dell'utente.
-    \item \texttt{Reviewer\_Score}: Voto assegnato dal recensore nella specifica istanza.
+    \item \texttt{Total\_Number\_of\_Reviews\_Reviewer\_Has\_Given}: Numero di recensioni rilasciate dell'utente in passato.
+    \item \texttt{Reviewer\_Score}: Voto assegnato dal recensore all'hotel.
     \item \texttt{Tags}: Lista di stringhe che descrivono il soggiorno (es. "Leisure trip", "Couple", "Stayed 2 nights").
-    \item \texttt{days\_since\_review}: Giorni trascorsi dallo scraping.
-    \item \texttt{lat} / \texttt{lng}: Coordinate geografiche (Latitudine/Longitudine).
+    \item \texttt{days\_since\_review}: Giorni trascorsi fra la pubblicazione e lo scraping della recensione.
+    \item \texttt{lat}: Latitudine dell'hotel.
+    \item \texttt{lng}: Longitudine dell'hotel.
 \end{itemize}
 
 \section{Descrizione delle Query Implementate}

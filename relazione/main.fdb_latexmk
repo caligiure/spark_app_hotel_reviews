@@ -1,6 +1,6 @@
 # Fdb version 4
-["pdflatex"] 1769360187.42936 "c:/antigravity/spark_app_hotel_reviews/relazione/relazione.tex" "relazione.pdf" "relazione" 1769360191.12622 0
-  "c:/antigravity/spark_app_hotel_reviews/relazione/relazione.tex" 1769360185 13214 ab577f24d8cc7faa33571c41beefd0cf ""
+["pdflatex"] 1769434896.64718 "c:/antigravity/spark_app_hotel_reviews/relazione/main.tex" "main.pdf" "main" 1769434898.95647 0
+  "c:/antigravity/spark_app_hotel_reviews/relazione/main.tex" 1769434869 14610 cd30a1d97b620a30b5539921bcdcf52a ""
   "c:/texlive/2025/texmf-dist/fonts/enc/dvips/cm-super/cm-super-ts1.enc" 1769274914 2900 1537cc8184ad1792082cd229ecc269f4 ""
   "c:/texlive/2025/texmf-dist/fonts/map/fontname/texfonts.map" 1769277118 3524 cb3e574dea2d1052e39280babc910dc8 ""
   "c:/texlive/2025/texmf-dist/fonts/tfm/jknappen/ec/tcrm1095.tfm" 1769276163 1536 02c06700a42be0f5a28664c7273f82e7 ""
@@ -81,14 +81,15 @@
   "c:/texlive/2025/texmf-var/fonts/map/pdftex/updmap/pdftex.map" 1769284481 5587484 49bd08ff372a6985d7d70778694ddaac ""
   "c:/texlive/2025/texmf-var/web2c/pdftex/pdflatex.fmt" 1769284999 3636149 b72d7e3f48021e8fde25873709ce360b ""
   "c:/texlive/2025/texmf.cnf" 1769284433 713 e69b156964470283e0530f5060668171 ""
-  "relazione.aux" 1769360190 2854 df3b5fdf045d397e0758e82c8dbc5adb "pdflatex"
-  "relazione.out" 1769360190 3993 541229c87904dc0531123222bcc983f3 "pdflatex"
-  "relazione.tex" 1769360185 13214 ab577f24d8cc7faa33571c41beefd0cf ""
-  "relazione.toc" 1769360190 1833 9da972fe6b1942781f7fd4a2eea6a9a3 "pdflatex"
+  "imgs/indirizzi.png" 1769431716 7570 e0a615903496d179752afc75f4f304a2 ""
+  "main.aux" 1769434898 3062 561825c8657eea5c91c64ecbd1bb4a65 "pdflatex"
+  "main.out" 1769434898 4085 3fd505651ff886dbefe37286f83fab05 "pdflatex"
+  "main.tex" 1769434869 14610 cd30a1d97b620a30b5539921bcdcf52a ""
+  "main.toc" 1769434898 1849 c9af1b9a0187de307a639de2538da24b "pdflatex"
   (generated)
-  "relazione.aux"
-  "relazione.log"
-  "relazione.out"
-  "relazione.pdf"
-  "relazione.toc"
+  "main.aux"
+  "main.log"
+  "main.out"
+  "main.pdf"
+  "main.toc"
   (rewritten before read)
