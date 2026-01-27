@@ -96,6 +96,126 @@ Il dataset utilizzato è \texttt{Hotel\_Reviews.csv} (reperibile su: \url{https:
 
 \section{Descrizione delle Query Implementate}
 
+\subsection{Trend Recensioni (Time Series)}
+
+\paragraph{Obiettivo:} Analizzare il \textbf{trend temporale} dei punteggi degli hotel (utilizzando la Regressione Lineare) per identificare quali alberghi stanno migliorando o peggiorando nel tempo.
+\begin{figure}[ht]
+    \centering
+    \includegraphics[width=0.9\linewidth]{imgs/trend.png}
+    \caption{Query Trend Recensioni (Time Series)}
+    \label{fig:trend}
+\end{figure}
+
+\paragraph{Logica Backend:}
+\begin{itemize}
+    \item Le recensioni vengono \textbf{raggruppate per hotel} e ordinate cronologicamente.
+    \item Per ogni gruppo (stesso hotel): da ogni recensione si estraggono i valori di \texttt{Reviewer\_Score} e \texttt{Review\_Date} (convertita in ordinale), quindi viene applicata una \textbf{regressione lineare (score vs tempo)} per calcolare la pendenza (\textbf{slope}) del \textbf{trend}. Inoltre, si effettua il calcolo di \textbf{altri valori aggregati}: punteggio medio, numero di recensioni, data della prima recensione, data dell'ultima recensione.
+    \item Viene restituito un dataframe contenente i risultati ottenuti per ogni hotel.
+\end{itemize}
+
+\paragraph{Tecnologie:} Viene definita una Pandas UDF (User Defined Function) per l'esecuzione della regressione lineare con \texttt{scikit-learn}. La UDF viene eseguita con la funzione \texttt{applyInPandas} affinché questa operazione sia parallelizzabile su ogni gruppo di hotel distribuito nei nodi Spark.
+
+\paragraph{Risultati:} Viene visualizzata la lista dei \textbf{Top 10 Hotel in Crescita} e dei \textbf{Top 10 Hotel in Calo}, ordinati per trend slope (Figura \ref{fig:trend2}), dove trend positivo indica miglioramento, mentre trend negativo indica peggioramento. Inoltre, viene visualizzato il grafico \textbf{Distribuzione Trend vs Punteggio Medio} (Figura \ref{fig:trend3}) che consente di individuare visivamente gli alberghi migliori o peggiori e leggerne le caratteristiche.
+
+\paragraph{Casi d'uso:} Identificare "\textbf{stelle nascenti}" o \textbf{hotel decadenti} nonostante un alto punteggio medio storico.
+\begin{figure}[ht]
+    \centering
+    \includegraphics[width=0.9\linewidth]{imgs/trend2.png}
+    \caption{Top 10 Hotel in Crescita/Calo}
+    \label{fig:trend2}
+\end{figure}
+\begin{figure}[ht]
+    \centering
+    \includegraphics[width=0.9\linewidth]{imgs/trend3.png}
+    \caption{Distribuzione Trend vs Punteggio Medio}
+    \label{fig:trend3}
+\end{figure}
+
+\subsection{Analisi Influenza Tag}
+
+\paragraph{Obiettivo:} Determinare quali fattori (es. "Single Room", "No Window") impattano positivamente o negativamente sul punteggio che i recensori assegnano agli hotel.
+\begin{figure}[ht]
+    \centering
+    \includegraphics[width=0.9\linewidth]{imgs/tag.png}
+    \caption{Query Analisi Influenza Tag}
+    \label{fig:tag}
+\end{figure}
+
+\paragraph{Logica Backend:} 
+\begin{itemize}
+    \item Le recensioni vengono "esplose" seguendo la logica di una \textbf{FlatMap}: si prende in input la stringa dei tag di ogni recensione, la stringa viene suddivisa in singoli tag, ciascuno dei quali viene poi "ripulito" da eventuali spazi vuoti o lettere maiuscole, e infine si produce in output una riga per ogni singolo tag letto in input (gli altri campi della riga vengono duplicati dalla recensione originale da cui è stato estratto il tag).
+    \item Le righe risultanti vengono raggruppate per tag, eseguendo delle operazioni di \textbf{aggregazione} sugli hotel associati ad ogni tag: conteggio del numero di hotel, calcolo del punteggio medio degli hotel e calcolo della \textbf{deviazione standard} (ad esempio, se la deviazione standard è alta, significa che i voti sono molto dispersi, quindi la valutazione del peso di quel tag sarà meno affidabile).
+    \item Viene calcolata la \textbf{media globale} sui punteggi medi di tutti i tag, per poter avere un indice di confronto sulla base del quale valutare se un tag ha un \textbf{impatto} positivo o negativo rispetto agli altri (ad esempio, se un tag ha una media di 9.0 e la media globale è 8.5, allora quel tag ha un "impatto positivo" (+0.5)).
+    \item Per ogni tag, vengono calcolati: \\
+    \texttt{Impact = Average\_Score - Global\_Average} \\
+    \texttt{Reliability\_Index = (1 / (StdDev + 0.1)) * log(Count)} \\
+    \texttt{Weighted\_Impact = Impact * Reliability\_Index} \\
+    Il \texttt{Reliability\_Index} è un indice euristico che valuta quanto è attendibile l'impatto di un tag, premiando i tag con una maggiore stabilità dei voti (deviazione standard bassa) e con un'alta frequenza (il logaritmo serve per mitigare l'impatto dei tag estremamente frequenti).
+    \item Viene restituito un dataframe contenente i risultati ottenuti per ogni tag.
+\end{itemize}
+
+\paragraph{Risultati:} Vengono visualizzate le classifiche dei \textbf{tag con il maggior impatto positivo e negativo} (Figura \ref{fig:tag2}), ordinati per \texttt{Weighted\_Impact} decrescente/crescente. Inoltre, viene visualizzato il grafico \textbf{Affidabilità vs Impatto} (Figura \ref{fig:tag3}), che consente di individuare i fattori che influenzano maggiormente (in positivo o in negativo) la valutazione degli hotel e valutare a colpo d'occhio il grado di attendibilità di ciascuno di essi.
+
+\paragraph{Casi d'uso:} Identificare le \textbf{caratteristiche più apprezzate o criticate} dai clienti degli hotel.
+\begin{figure}[ht]
+    \centering
+    \includegraphics[width=0.9\linewidth]{imgs/tag2.png}
+    \caption{Top 10 Tag Positivi/Negativi}
+    \label{fig:tag2}
+\end{figure}
+\begin{figure}[ht]
+    \centering
+    \includegraphics[width=0.9\linewidth]{imgs/tag3.png}
+    \caption{Grafico Affidabilità vs Impatto}
+    \label{fig:tag3}
+\end{figure}
+
+\subsection{Analisi Bias Nazionalità}
+
+\paragraph{Obiettivo:} Individuare, se esistono, le nazionalità che tendono a dare voti più alti o bassi rispetto alla media.
+\begin{figure}[ht]
+    \centering
+    \includegraphics[width=0.9\linewidth]{imgs/bias.png}
+    \caption{Query Analisi Bias Nazionalità}
+    \label{fig:bias}
+\end{figure}
+
+\paragraph{Logica Backend:}
+\begin{itemize}
+    \item Raggruppamento delle recensioni per \texttt{Reviewer\_Nationality}.
+    \item Calcolo di valori aggregati per ogni nazionalità: numero di recensioni, media dei punteggi assegnati nelle recensioni, media del numero di parole positive scritte nelle recensioni, media del numero di parole negative scritte nelle recensioni.
+    \item Calcolo della \textbf{media globale} di tutti i punteggi assegnati in tutte le recensioni (da utilizzare per confronto).
+    \item Calcolo dello \texttt{Score\_Deviation} di ogni nazionalità, cioè la differenza fra la media dei punteggi assegnati da recensori di quella nazionalità e la media globale. Questa metrica indica se mediamente i recensori di una certa nazionalità sono più \textbf{critici (deviazione negativa)} o \textbf{generosi (deviazione positiva)} nell'assegnare le valutazioni degli hotel.
+    \item Calcolo del \texttt{Sentiment\_Ratio} di ogni nazionalità, cioè il rapporto fra numero di parole positive e negative utilizzate nelle recensioni. Questa metrica, quando considerata in relazione con il punteggio medio assegnato dai recensori di una certa nazionalità, indica la \textbf{coerenza} di questi recensori: chi dà più spesso valutazioni numeriche positive dovrebbe avere un \texttt{Sentiment\_Ratio} positivo (cioè dovrebbe utilizzare mediamente più parole positive che negative), mentre chi è più critico e dà più spesso valutazioni numeriche negative dovrebbe avere un \texttt{Sentiment\_Ratio} negativo.
+    \item Restituzione del dataset aggregato per \texttt{Reviewer\_Nationality}, con le metriche calcolate.
+\end{itemize}
+
+\paragraph{Risultati:} Vengono visualizzate le classifiche delle \textbf{nazionalità più critiche e più generose} (Figura \ref{fig:bias2}), ordinate per \texttt{Score\_Deviation} crescente/decrescente. Inoltre, viene visualizzato il grafico \textbf{Correlazione Voto vs Positività Testo} (Figura \ref{fig:bias3}), che consente di valutare visivamente la coerenza dei recensori per ogni nazionalità.
+
+\paragraph{Casi d'uso:} Profilazione per nazionalità e identificazione di bias culturali che peggiorano/migliorano l'esperienza dei clienti.
+\begin{figure}[ht]
+    \centering
+    \includegraphics[width=0.9\linewidth]{imgs/bias2.png}
+    \caption{Classifica nazionalità più critiche e più generose}
+    \label{fig:bias2}
+\end{figure}
+\begin{figure}[ht]
+    \centering
+    \includegraphics[width=0.9\linewidth]{imgs/bias3.png}
+    \caption{Correlazione Voto vs Positività Testo}
+    \label{fig:bias3}
+\end{figure}
+
+\subsection{Analisi Competitività Locale}
+\textbf{Obiettivo}: Confrontare le performance di un hotel rispetto ai suoi diretti concorrenti geografici. \\
+\textbf{Logica}: Esegue un self-join del dataset basato sulla distanza geografica (Formula di Haversine). Ogni hotel viene confrontato con tutti gli altri hotel entro un raggio $K$ km. Viene calcolato il delta tra il punteggio dell'hotel e la media del vicinato. \\
+\textbf{Tecnologie}: Join cartesiano ottimizzato con filtri geospaziali, funzioni trigonometriche Spark. \\
+\textbf{Risultati}: Identificazione di "Local Gems" (punteggio alto in zona mediocre) e "Underperformers". \\
+\textbf{Casi d'uso}: Analisi di mercato competitiva per area geografica.
+
+
+
+
 \subsection{1. Top Hotel per Nazione}
 \textbf{Obiettivo}: Identificare le eccellenze alberghiere suddivise per paese. \\
 \textbf{Logica}: La query estrae la nazione dall'indirizzo dell'hotel, raggruppa le strutture per nazione e le ordina in base al punteggio medio (\texttt{Average\_Score}) e al numero di recensioni (come tie-breaker). \\
@@ -103,26 +223,7 @@ Il dataset utilizzato è \texttt{Hotel\_Reviews.csv} (reperibile su: \url{https:
 \textbf{Risultati}: Lista dei top N hotel per ogni nazione presente nel dataset (UK, France, Italy, etc.). \\
 \textbf{Casi d'uso}: Utenti che cercano i migliori hotel assoluti in una specifica destinazione turistica.
 
-\subsection{2. Trend Temporale delle Recensioni}
-\textbf{Obiettivo}: Capire se un hotel sta migliorando o peggiorando nel tempo. \\
-\textbf{Logica}: Le recensioni vengono raggruppate per hotel e ordinate cronologicamente. Viene applicata una regressione lineare (score vs tempo) per calcolare la pendenza (slope) del trend. \\
-\textbf{Tecnologie}: Pandas UDF (User Defined Function) per parallelizzare l'esecuzione di \texttt{scikit-learn LinearRegression} su ogni gruppo di hotel distribuito nei nodi Spark. \\
-\textbf{Risultati}: Coefficiente di trend per ogni hotel. Slope positivo indica miglioramento, negativo peggioramento. \\
-\textbf{Casi d'uso}: Identificare "stelle nascenti" o hotel decadenti nonostante un alto punteggio medio storico.
 
-\subsection{3. Analisi Influenza Tag (MapReduce)}
-\textbf{Obiettivo}: Determinare quali fattori (es. "Single Room", "No Window") impattano positivamente o negativamente sul voto. \\
-\textbf{Logica}: Segue il paradigma MapReduce. Fase Map: "esplosione" della stringa dei tag in righe singole. Fase Reduce: aggregazione per singolo tag calcolando la media dei voti delle recensioni in cui appare e lo scostamento dalla media globale. \\
-\textbf{Tecnologie}: \texttt{explode}, \texttt{groupBy}, aggregazioni statistiche. \\
-\textbf{Risultati}: Classifica dei tag con il maggiore impatto positivo e negativo (Impact Score) e relativo indice di affidabilità. \\
-\textbf{Casi d'uso}: Gestori hotel che vogliono capire quali caratteristiche sono più apprezzate o criticate.
-
-\subsection{4. Local Competitiveness (Analisi Geospaziale)}
-\textbf{Obiettivo}: Confrontare le performance di un hotel rispetto ai suoi diretti concorrenti geografici. \\
-\textbf{Logica}: Esegue un self-join del dataset basato sulla distanza geografica (Formula di Haversine). Ogni hotel viene confrontato con tutti gli altri hotel entro un raggio $K$ km. Viene calcolato il delta tra il punteggio dell'hotel e la media del vicinato. \\
-\textbf{Tecnologie}: Join cartesiano ottimizzato con filtri geospaziali, funzioni trigonometriche Spark. \\
-\textbf{Risultati}: Identificazione di "Local Gems" (punteggio alto in zona mediocre) e "Underperformers". \\
-\textbf{Casi d'uso}: Analisi di mercato competitiva per area geografica.
 
 \subsection{5. Segmentazione Hotel (K-Means Clustering)}
 \textbf{Obiettivo}: Raggruppare gli hotel in cluster omogenei basati su caratteristiche multidimensionali. \\
@@ -130,13 +231,6 @@ Il dataset utilizzato è \texttt{Hotel\_Reviews.csv} (reperibile su: \url{https:
 \textbf{Tecnologie}: \texttt{Spark MLlib} (VectorAssembler, StandardScaler, KMeans pipeline). \\
 \textbf{Risultati}: Assegnazione di ogni hotel a un cluster (es. "Hotel Popolari di Lusso", "Hotel Economici di Nicchia"). \\
 \textbf{Casi d'uso}: Segmentazione di marketing, raccomandazioni di hotel simili.
-
-\subsection{6. Bias Nazionalità Recensore}
-\textbf{Obiettivo}: Capire se certe nazionalità tendono a dare voti più alti o bassi rispetto alla media. \\
-\textbf{Logica}: Raggruppamento per \texttt{Reviewer\_Nationality} e calcolo della media voti e deviazione standard. \\
-\textbf{Tecnologie}: Aggregazioni Spark standard. \\
-\textbf{Risultati}: Profilo di voto per nazione (es. "Gli utenti da X tendono a votare basso"). \\
-\textbf{Casi d'uso}: Normalizzazione dei voti in piattaforme internazionali.
 
 \subsection{7. Locali vs Turisti}
 \textbf{Obiettivo}: Analizzare la differenza di percezione tra chi visita il proprio paese (Local) e chi viene dall'estero (Tourist). \\
@@ -161,7 +255,8 @@ Il dataset utilizzato è \texttt{Hotel\_Reviews.csv} (reperibile su: \url{https:
 
 \subsection{10. Esperienza del Recensore}
 \textbf{Obiettivo}: Valutare se i recensori esperti sono più critici dei novizi. \\
-\textbf{Logica}: Segmentazione dei recensori in base al campo \texttt{Total\_Number\_of\_Reviews\_Reviewer\_Has\_Given} (Novice, Intermediate, Expert). Confronto delle distribuzioni dei voti. \\
+\textbf{Logica}: Segmentazione dei recensori in base al campo \\\texttt{Total\_Number\_of\_Reviews\_Reviewer\_Has\_Given} (Novice, Intermediate, Expert). \\
+Confronto delle distribuzioni dei voti. \\
 \textbf{Tecnologie}: Bucketizer o logica condizionale personalizzata. \\
 \textbf{Risultati}: Analisi della severità del voto in funzione dell'esperienza. \\
 \textbf{Casi d'uso}: Ponderazione del peso delle recensioni in un sistema di ranking avanzato.

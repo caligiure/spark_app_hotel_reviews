@@ -12,10 +12,8 @@ Sfruttando le potenzialità di elaborazione distribuita offerte dal framework Sp
 
 ## Analisi del dataset
 
-Il dataset utilizzato `e Hotel Reviews.csv (reperibile su: https://www.kaggle.com/datasets/
-jiashenliu/515k-hotel-reviews-data-in-europe. Questo archivio contiene oltre 515.000
-recensioni di hotel di lusso in Europa, raccolte dal sito Booking.com, dove sono pubblicamen-
-te accessibili. Ogni riga del dataset corrisponde ad una recensione e presenta 17 campi che
+Il dataset utilizzato `e Hotel Reviews.csv (reperibile su: https://www.kaggle.com/datasets/jiashenliu/515k-hotel-reviews-data-in-europe. 
+Questo archivio contiene oltre 515.000 recensioni di hotel di lusso in Europa, raccolte dal sito Booking.com, dove sono pubblicamente accessibili. Ogni riga del dataset corrisponde ad una recensione e presenta 17 campi che
 descrivono sia le caratteristiche dell’hotel, sia l’esperienza del cliente.
 *   Dimensione File: Circa 238 MB
 *   Numero di Righe: 515.738

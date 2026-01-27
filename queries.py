@@ -99,11 +99,11 @@ def analyze_tag_influence(df, min_count=50):
     Returns:
         DataFrame PySpark con le colonne selezionate e i top n hotel per nazione
     """
-    # 1. Pulizia e Map (Explode)
+    # 1. Pulizia e FlatMap (Explode)
     # Il campo Tags è una stringa tipo "[' Leisure trip ', ' Couple ', ...]". Dobbiamo rimuovere [ ' ] e splittare per virgola
     clean_tags = F.regexp_replace(F.col("Tags"), "[\\[\\]']", "") # Trasformazione LAZY: restituisce "Leisure trip, Couple, ..."
     splitted_tags = F.split(clean_tags, ",") # Trasformazione LAZY: restituisce ["Leisure trip", "Couple", ...]
-    # Explode (Map Phase):
+    # Explode (FlatMap Phase):
     # aggiunge una nuova colonna Single_Tag e per calcolarne il valore usa explode(splitted_tags)
     # explode(splitted_tags), crea una nuova riga per ogni elemento dell'array splitted_tags
     # Esempio: se una riga ha Tags = "[Leisure Trip, Couple]", explode crea due righe: una con Single_Tag = 'Leisure Trip' e una con Single_Tag = 'Couple'

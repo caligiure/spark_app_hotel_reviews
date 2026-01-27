@@ -1,6 +1,6 @@
 # Fdb version 4
-["pdflatex"] 1769434896.64718 "c:/antigravity/spark_app_hotel_reviews/relazione/main.tex" "main.pdf" "main" 1769434898.95647 0
-  "c:/antigravity/spark_app_hotel_reviews/relazione/main.tex" 1769434869 14610 cd30a1d97b620a30b5539921bcdcf52a ""
+["pdflatex"] 1769540538.00101 "c:/antigravity/spark_app_hotel_reviews/relazione/main.tex" "main.pdf" "main" 1769540542.3228 0
+  "c:/antigravity/spark_app_hotel_reviews/relazione/main.tex" 1769540531 21148 52f1666687d3cd13bcd08e9e59708468 ""
   "c:/texlive/2025/texmf-dist/fonts/enc/dvips/cm-super/cm-super-ts1.enc" 1769274914 2900 1537cc8184ad1792082cd229ecc269f4 ""
   "c:/texlive/2025/texmf-dist/fonts/map/fontname/texfonts.map" 1769277118 3524 cb3e574dea2d1052e39280babc910dc8 ""
   "c:/texlive/2025/texmf-dist/fonts/tfm/jknappen/ec/tcrm1095.tfm" 1769276163 1536 02c06700a42be0f5a28664c7273f82e7 ""
@@ -81,11 +81,20 @@
   "c:/texlive/2025/texmf-var/fonts/map/pdftex/updmap/pdftex.map" 1769284481 5587484 49bd08ff372a6985d7d70778694ddaac ""
   "c:/texlive/2025/texmf-var/web2c/pdftex/pdflatex.fmt" 1769284999 3636149 b72d7e3f48021e8fde25873709ce360b ""
   "c:/texlive/2025/texmf.cnf" 1769284433 713 e69b156964470283e0530f5060668171 ""
+  "imgs/bias.png" 1769538255 137808 0cc488dd146dd1f95e21cba4c8d691a6 ""
+  "imgs/bias2.png" 1769538465 137676 395496fa953a02217dfd2a411077825c ""
+  "imgs/bias3.png" 1769538496 113494 844a0a633eb8d5872ff51cc3b8116a93 ""
   "imgs/indirizzi.png" 1769431716 7570 e0a615903496d179752afc75f4f304a2 ""
-  "main.aux" 1769434898 3062 561825c8657eea5c91c64ecbd1bb4a65 "pdflatex"
-  "main.out" 1769434898 4085 3fd505651ff886dbefe37286f83fab05 "pdflatex"
-  "main.tex" 1769434869 14610 cd30a1d97b620a30b5539921bcdcf52a ""
-  "main.toc" 1769434898 1849 c9af1b9a0187de307a639de2538da24b "pdflatex"
+  "imgs/tag.png" 1769531230 186412 647247d9ee2561ec72efa98be911b4e3 ""
+  "imgs/tag2.png" 1769533997 189127 10762b8cad339e314aa3d1ab798eeb6b ""
+  "imgs/tag3.png" 1769534080 211507 98a11ff524f6e334429e3fef6b82d630 ""
+  "imgs/trend.png" 1769514017 171557 9b25077f6a3aaf73b1e49fbf64b6c0db ""
+  "imgs/trend2.png" 1769514133 238787 69ff3ff906942daf8468b11902b3aaf6 ""
+  "imgs/trend3.png" 1769514261 146318 d55d7eb62f029bdda1d0b75290d88e94 ""
+  "main.aux" 1769540542 6298 7954bb76c48901780fbdb4548f8260ad "pdflatex"
+  "main.out" 1769540542 3849 6a9e6bb16123dd0bfd5c203fa8002f80 "pdflatex"
+  "main.tex" 1769540531 21148 52f1666687d3cd13bcd08e9e59708468 ""
+  "main.toc" 1769540542 2538 0010aa863b4f894da8cad90046d004dc "pdflatex"
   (generated)
   "main.aux"
   "main.log"

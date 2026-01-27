@@ -80,7 +80,9 @@ try:
         # Query: Trend Recensioni
         if query_options[selected_query] == "review_trends":
             st.markdown("""
-            Questa analisi calcola il **trend temporale** dei punteggi per ogni hotel utilizzando la **Regressione Lineare**.
+            Analizza il **trend temporale** dei punteggi di ogni hotel, utilizzando la **Regressione Lineare**.
+            
+            L'**obiettivo** è capire se un hotel sta migliorando o peggiorando nel tempo.
             
             Viene identificato se la **reputazione** dell'hotel è:
             *   **📈 In crescita**: quando la pendenza della retta di regressione lineare è positiva.
@@ -96,10 +98,11 @@ try:
             *   `Last_Review_Date`: Data della ultima recensione dell'hotel.
             """)
             st.info("**Nota**: Il calcolo del trend viene effettuato tenendo conto solo delle recensioni presenti nel dataset che hanno una data valida. Inoltre, vengono esclusi gli hotel con meno di 30 recensioni valide.")
+            min_number_of_reviews = st.slider("Minimo numero di recensioni per albergo", 10, 1000, 30, step=10)
             if st.button("Calcola Trend per tutti gli Hotel"):
                 with st.spinner("Calcolo regressione lineare per ogni hotel in corso... (potrebbe richiedere qualche secondo)"):
                     # Esegue la query (da queries.py)
-                    trends_df = analyze_review_trends(df, min_number_of_reviews = 30)
+                    trends_df = analyze_review_trends(df, min_number_of_reviews)
                     # Conversione in Pandas per la visualizzazione
                     trends_pdf = trends_df.toPandas()
                     if not trends_pdf.empty:
@@ -142,7 +145,7 @@ try:
             Inoltre, per ogni tag viene calcolato un **indice di affidabilità** che tiene conto della frequenza e della deviazione standard dei voti,
             premiando i tag con elevata frequenza e deviazione standard ridotta (cioè i tag che appaiono spesso e in recensioni con voti simili e coerenti fra loro)
             
-            1.  **Map**: Esplode la lista dei tag di ogni recensione.
+            1.  **FlatMap**: Esplode la lista dei tag di ogni recensione.
             2.  **Reduce**: Aggrega per tag calcolando voto medio, frequenza e deviazione standard.
             3.  **Analisi di ogni tag**:
                 * **Average_Score**: punteggio medio delle recensioni associate al tag.
