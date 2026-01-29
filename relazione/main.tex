@@ -386,7 +386,7 @@ Il dataset utilizzato è \texttt{Hotel\_Reviews.csv} (reperibile su: \url{https:
 \begin{figure}[ht]
     \centering
     \includegraphics[width=0.9\linewidth]{imgs/stag.png}
-    \caption{Analisi Stagionale \& Target}
+    \caption{Query Analisi Stagionale \& Target}
     \label{fig:stag}
 \end{figure}
 
@@ -429,20 +429,82 @@ Il dataset utilizzato è \texttt{Hotel\_Reviews.csv} (reperibile su: \url{https:
 \end{figure}
 \clearpage
 % -------------------------------------
-\subsection{9. Analisi Durata Soggiorno}
-\textbf{Obiettivo}: Correlare la durata del soggiorno al livello di soddisfazione. \\
-\textbf{Logica}: Utilizzo di Regular Expressions per estrarre il numero di notti dal campo \texttt{Tags} (es. "Stayed 3 nights"). Categorizzazione in Short, Medium, Long stay e calcolo media voti. \\
-\textbf{Tecnologie}: \texttt{regexp\_extract}, conditional logic (\texttt{when/otherwise}). \\
-\textbf{Risultati}: Statistiche che mostrano se i soggiorni lunghi tendono ad avere recensioni peggiori o migliori. \\
-\textbf{Casi d'uso}: Ottimizzazione offerte per soggiorni lunghi/corti.
+\subsection{Analisi Durata Soggiorno}
+
+\paragraph{Obiettivo:} Analizzare la correlazione tra la durata del soggiorno (numero di notti) e il livello di soddisfazione dei clienti.
+\begin{figure}[ht]
+    \centering
+    \includegraphics[width=0.9\linewidth]{imgs/sog.png}
+    \caption{Query Analisi Durata Soggiorno}
+    \label{fig:sog}
+\end{figure}
+
+\paragraph{Logica Backend:}
+\begin{itemize}
+    \item Logica FlatMap per l'estrazione del numero di notti dai tag delle recensioni:
+    \begin{itemize}
+        \item input: tutte le recensioni, output: esplosione del dataset, producendo in output una riga per ogni elemento della lista dei tag di ogni recensione,
+        \item filtraggio di tutte le righe che presentano un tag nella forma "Stayed X nights",
+        \item estrazione del numero di notti (X),
+        \item categorizzazione del soggiorno fra: Short (1-3), Medium (4-7), Long (8+).
+    \end{itemize}
+    \item Raggruppamento delle recensioni risultanti per hotel e categoria di soggiorno, con calcolo dei seguenti valori aggregati: punteggio medio, conteggio recensioni, durata media dei soggiorni.
+\end{itemize}
+
+\paragraph{Risultati:}
+\begin{itemize}
+    \item Viene analizzato lo \texttt{Score\_Delta} delle diverse categorie di soggiorno, che è un \textbf{indicatore globale delle performance} di ogni categoria (Figura \ref{fig:sog2}). Lo \texttt{Score\_Delta} indica quanto il punteggio medio di ogni categoria di recensioni si discosta dalla media globale: ad esempio, se le recensioni di categoria "Long Stay" hanno un \textbf{delta negativo}, significa che, mediamente, i clienti che soggiornano a lungo negli hotel sono più \textbf{insoddisfatti} rispetto al gradimento medio globale.
+    \item Vengono visualizzate le classifiche dei migliori hotel per ogni categoria di soggiorno, ordinate per punteggio medio (Figura \ref{fig:sog3}).
+    \item Viene visualizzato un grafico della distribuzione degli hotel in relazione alla durata media dei soggiorni dei loro clienti e al loro punteggio medio (Figura \ref{fig:sog4}). Da questa rappresentazione è possibile valutare quali sono le durate dei soggiorni più frequenti e come sono correlate con la soddisfazione dei clienti.
+\end{itemize}
+
+\paragraph{Casi d'uso:} Ottimizzazione delle offerte per soggiorni lunghi e corti, grazie a statistiche che mostrano se i soggiorni lunghi tendono ad avere recensioni peggiori o migliori.
+\begin{figure}[ht]
+    \centering
+    \includegraphics[width=0.9\linewidth]{imgs/sog2.png}
+    \caption{Performance Globale (Scostamento dalla Media)}
+    \label{fig:sog2}
+\end{figure}
+\begin{figure}[ht]
+    \centering
+    \includegraphics[width=0.9\linewidth]{imgs/sog3.png}
+    \caption{Classifiche dei migliori hotel per ogni categoria di soggiorno}
+    \label{fig:sog3}
+\end{figure}
+\begin{figure}[ht]
+    \centering
+    \includegraphics[width=0.9\linewidth]{imgs/sog4.png}
+    \caption{Grafico distribuzione hotel: punteggio medio vs durata soggiorno}
+    \label{fig:sog4}
+\end{figure}
+\clearpage
 % -------------------------------------
-\subsection{10. Esperienza del Recensore}
-\textbf{Obiettivo}: Valutare se i recensori esperti sono più critici dei novizi. \\
-\textbf{Logica}: Segmentazione dei recensori in base al campo \\\texttt{Total\_Number\_of\_Reviews\_Reviewer\_Has\_Given} (Novice, Intermediate, Expert). \\
-Confronto delle distribuzioni dei voti. \\
-\textbf{Tecnologie}: Bucketizer o logica condizionale personalizzata. \\
-\textbf{Risultati}: Analisi della severità del voto in funzione dell'esperienza. \\
-\textbf{Casi d'uso}: Ponderazione del peso delle recensioni in un sistema di ranking avanzato.
+\subsection{Analisi Esperienza Recensore}
+
+\paragraph{Obiettivo:} Valutare se il punteggio delle recensioni degli hotel cambia in base all'esperienza dei recensori (ad esempio se i recensori esperti sono più critici dei novizi).
+\begin{figure}[ht]
+    \centering
+    \includegraphics[width=0.9\linewidth]{imgs/esp.png}
+    \caption{Query Analisi Esperienza Recensore}
+    \label{fig:esp}
+\end{figure}
+
+\paragraph{Logica Backend:}
+\begin{itemize}
+    \item Categorizzazione recensioni in base all'esperienza del recensore, cioè in base al campo \texttt{Total\_Number\_of\_Reviews\_Reviewer\_Has\_Given}: se ha scritto meno di 5 recensioni allora è un "\textbf{Novizio}", se ha scritto fra 5 e 25 recensioni allora è un "\textbf{Intermedio}", altrimenti è un "\textbf{Esperto}".
+    \item Aggregazione (con pivot su \texttt{Experience\_Level}), raggruppando per Hotel e livello di esperienza del recensore, calcolando punteggio medio e numero di recensioni.
+    \item Calcolo dell'\texttt{Experience\_Gap} per ogni hotel, cioè la differenza tra il voto medio ottenuto dalle recensioni degli esperti e il voto medio ottenuto dalle recensioni dei novizi.
+\end{itemize}
+
+\paragraph{Risultati:}
+\begin{itemize}
+    \item Viene visualizzato il \textbf{Gap Medio} (Figura ), cioè la differenza fra il voto medio assegnato dagli esperti e il voto medio assegnato dai novizi, calcolato su tutte le recensioni. Questo valore è la \textbf{metrica di riferimento} per valutare quanto in media i recensori esperti sono più critici dei novizi, o viceversa. Inoltre, vengono visualizzate le classifiche degli hotel con la maggior discrepanza (\texttt{Experience\_Gap}) fra la valutazione degli esperti e quella dei novizi, sia in negativo (hotel criticati dagli esperti e apprezzati dai novizi), sia in positivo (hotel apprezzati dagli esperti e criticati dai novizi). Con questi confronti è possibile valutare quanto in media l'esperienza dei recensori impatta sulla valutazione degli hotel e quanto sono concordi o discordi le opinioni di recensori con diversi livelli di esperienza.
+    \item Viene visualizzato un grafico della distribuzione degli hotel in relazione al voto ottenuto dai novizi e dagli esperti (Figura ), che consente di valutare visivamente quanto sono frequenti gli hotel con alta o bassa discrepanza di voti.
+\end{itemize}
+
+\paragraph{Casi d'uso:} Analisi della severità del voto in funzione dell'esperienza, in funzione di una ponderazione del peso delle recensioni in un sistema di ranking avanzato.
+
+
  % -------------------------------------
 \section{Conclusioni Finali}
 Il progetto ha dimostrato con successo come l'utilizzo di \textbf{Spark} permetta di effettuare analisi complesse e multidimensionali su un dataset di grandi dimensioni con tempi di risposta contenuti. L'architettura implementata garantisce scalabilità orizzontale, potendo gestire volumi di dati ben superiori a quello attuale senza modifiche al codice.
