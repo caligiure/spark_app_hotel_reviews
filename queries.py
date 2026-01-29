@@ -479,7 +479,7 @@ def compare_local_vs_tourist_reviews(df, min_reviews_per_group=10):
         F.col("Local_Avg_Score") - F.col("Tourist_Avg_Score")
     )
 
-    # --- STEP AGGIUNTIVO: Top Nationalities Summary ---
+    # Top Nationalities Summary
     # Calcolo dei top 10 gruppi nazionali per hotel
     # usiamo df_prep (creato prima), che dispone dei campi Hotel_Nation e Reviewer_Nationality_Clean
     

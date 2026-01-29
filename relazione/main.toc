@@ -40,8 +40,16 @@
 \contentsline {paragraph}{Logica Backend:}{15}{section*.25}%
 \contentsline {paragraph}{Risultati:}{15}{section*.26}%
 \contentsline {paragraph}{Casi d'uso:}{15}{section*.27}%
-\contentsline {subsection}{\numberline {3.7}7. Locali vs Turisti}{17}{subsection.3.7}%
-\contentsline {subsection}{\numberline {3.8}8. Preferenze Stagionali}{17}{subsection.3.8}%
-\contentsline {subsection}{\numberline {3.9}9. Analisi Durata Soggiorno}{17}{subsection.3.9}%
-\contentsline {subsection}{\numberline {3.10}10. Esperienza del Recensore}{17}{subsection.3.10}%
-\contentsline {section}{\numberline {4}Conclusioni Finali}{17}{section.4}%
+\contentsline {subsection}{\numberline {3.7}Locals vs Tourists - Preferenze e distribuzione clienti}{17}{subsection.3.7}%
+\contentsline {paragraph}{Obiettivo:}{17}{section*.28}%
+\contentsline {paragraph}{Logica Backend:}{17}{section*.29}%
+\contentsline {paragraph}{Risultati:}{17}{section*.30}%
+\contentsline {paragraph}{Casi d'uso:}{17}{section*.31}%
+\contentsline {subsection}{\numberline {3.8}Analisi Stagionale \& Target}{20}{subsection.3.8}%
+\contentsline {paragraph}{Obiettivo:}{20}{section*.32}%
+\contentsline {paragraph}{Logica Backend:}{20}{section*.33}%
+\contentsline {paragraph}{Risultati:}{20}{section*.34}%
+\contentsline {paragraph}{Casi d'uso:}{20}{section*.35}%
+\contentsline {subsection}{\numberline {3.9}9. Analisi Durata Soggiorno}{22}{subsection.3.9}%
+\contentsline {subsection}{\numberline {3.10}10. Esperienza del Recensore}{22}{subsection.3.10}%
+\contentsline {section}{\numberline {4}Conclusioni Finali}{22}{section.4}%

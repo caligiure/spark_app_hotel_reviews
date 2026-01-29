@@ -192,7 +192,7 @@ Il dataset utilizzato è \texttt{Hotel\_Reviews.csv} (reperibile su: \url{https:
 
 \paragraph{Risultati:} Vengono visualizzate le classifiche delle \textbf{nazionalità più critiche e più generose} (Figura \ref{fig:bias2}), ordinate per \texttt{Score\_Deviation} crescente/decrescente. Inoltre, viene visualizzato il grafico \textbf{Correlazione Voto vs Positività Testo} (Figura \ref{fig:bias3}), che consente di valutare visivamente la coerenza dei recensori per ogni nazionalità.
 
-\paragraph{Casi d'uso:} Profilazione per nazionalità e identificazione di bias culturali che peggiorano/migliorano l'esperienza dei clienti.
+\paragraph{Casi d'uso:} Profilazione per nazionalità e identificazione di bias culturali che peggiorano o migliorano l'esperienza dei clienti.
 \begin{figure}[ht]
     \centering
     \includegraphics[width=0.9\linewidth]{imgs/bias2.png}
@@ -330,19 +330,104 @@ Il dataset utilizzato è \texttt{Hotel\_Reviews.csv} (reperibile su: \url{https:
 \end{figure}
 \clearpage
 % -------------------------------------
-\subsection{7. Locali vs Turisti}
-\textbf{Obiettivo}: Analizzare la differenza di percezione tra chi visita il proprio paese (Local) e chi viene dall'estero (Tourist). \\
-\textbf{Logica}: Confronto tra la nazione dell'hotel e la nazione del recensore. Calcolo separato delle medie per i due gruppi. \\
-\textbf{Tecnologie}: Conditional Aggregation. \\
-\textbf{Risultati}: Identificazione di "Trappole per turisti" (voti turisti $>$ locali) o "Preferiti dai locali". \\
-\textbf{Casi d'uso}: Consigli di viaggio autentici basati sulle preferenze dei locali.
+\subsection{Locals vs Tourists - Preferenze e distribuzione clienti}
+
+\paragraph{Obiettivo:} Analizzare la differenza di percezione tra chi visita il proprio paese (Local) e chi viene dall'estero (Tourist).
+\begin{figure}[ht]
+    \centering
+    \includegraphics[width=0.9\linewidth]{imgs/tour.png}
+    \caption{Query Locals vs Tourists - Preferenze e distribuzione clienti}
+    \label{fig:tour}
+\end{figure}
+
+\paragraph{Logica Backend:}
+\begin{itemize}
+    \item Estrazione della nazione dall'indirizzo dell'hotel e della nazionalità del recensore, poi classificazione fra Local (stessa nazione) e Tourist.
+    \item Raggruppamento per hotel e nazione, poi pivot su tipologia di recensore (Local o Tourist) e infine calcolo di valori aggregati: \texttt{Local\_Avg\_Score}, \texttt{Tourist\_Avg\_Score} e differenza fra i due valori (\texttt{Preference\_Delta}).
+    \item Calcolo della percentuale di recensioni proveniente da ogni gruppo nazionale per ogni hotel:
+    \begin{itemize}
+        \item Aggregazione per hotel e calcolo numero totale di recensioni.
+        \item Aggregazione per hotel e nazionalità recensore per calcolo numero di recensioni da recensori con stessa nazionalità.
+        \item Calcolo percentuale di recensioni di ogni nazionalità rispetto al totale delle recensioni, per ogni hotel.
+    \end{itemize}
+\end{itemize}
+
+\paragraph{Risultati:}
+\begin{itemize}
+    \item Liste degli hotel preferiti dai locali (\texttt{Preference\_Delta} positivo) e degli hotel preferiti dai turisti (\texttt{Preference\_Delta} negativo), ordinati per \texttt{Preference\_Delta}, in modo da visualizzare per primi gli hotel che hanno le maggiori discrepanze di voto (Figura \ref{fig:tour2}).
+    \item Grafico Discrepanza Voti per individuare visivamente la distribuzione degli hotel in relazione alla tipologia di clientela che li apprezza di più o di meno (Figura \ref{fig:tour3}).
+    \item Grafico Distribuzione Nazionalità per visualizzare la composizione percentuale delle nazionalità dei visitatori degli Hotel (Figura \ref{fig:tour4}).
+\end{itemize}
+
+\paragraph{Casi d'uso:} Identificazione di "Trappole per turisti" o "Preferiti dai locali" (hotel che potrebbero offrire un'esperienza più autentica).
+\begin{figure}[ht]
+    \centering
+    \includegraphics[width=0.9\linewidth]{imgs/tour2.png}
+    \caption{Liste degli hotel preferiti dai locali e degli hotel preferiti dai turisti}
+    \label{fig:tour2}
+\end{figure}
+\begin{figure}[ht]
+    \centering
+    \includegraphics[width=0.9\linewidth]{imgs/tour3.png}
+    \caption{Grafico Discrepanza Voti}
+    \label{fig:tour3}
+\end{figure}
+\begin{figure}[ht]
+    \centering
+    \includegraphics[width=0.9\linewidth]{imgs/tour4.png}
+    \caption{Grafico Distribuzione Nazionalità}
+    \label{fig:tour4}
+\end{figure}
+\clearpage
 % -------------------------------------
-\subsection{8. Preferenze Stagionali}
-\textbf{Obiettivo}: Analizzare come varia il gradimento in base alla stagione e al tipo di viaggio (Leisure/Business). \\
-\textbf{Logica}: Estrazione del mese dalla data recensione per determinare la stagione. Parsing dei tag per identificare il tipo di viaggio. Aggregazione combinata. \\
-\textbf{Tecnologie}: Date functions, String matching su tags. \\
-\textbf{Risultati}: Performance degli hotel in specifiche stagioni (es. hotel ottimi per l'estate ma carenti in inverno). \\
-\textbf{Casi d'uso}: Pianificazione viaggi in base al periodo.
+\subsection{Analisi Stagionale \& Target}
+
+\paragraph{Obiettivo:} Analizzare come varia il gradimento in base alla stagione e al tipo di viaggio (Leisure/Business/Solo/Family/Group/Couple).
+\begin{figure}[ht]
+    \centering
+    \includegraphics[width=0.9\linewidth]{imgs/stag.png}
+    \caption{Analisi Stagionale \& Target}
+    \label{fig:stag}
+\end{figure}
+
+\paragraph{Logica Backend:}
+\begin{itemize}
+    \item Estrazione \textbf{mese} dalla data della recensione.
+    \item Estrazione \textbf{tipologia di viaggiatore} analizzando i tag della recensione: poichè una recensione potrebbe appartenere a più tipi contemporaneamente (es. Solo e Business, Group e Leisure), si applica la logica della \textbf{FlatMap}:
+    \begin{itemize}
+        \item si estrae tutta la lista dei tag e si filtrano solo quelli utili
+        \item per ogni tag si genera una nuova riga in cui il campo \texttt{Traveler\_Type} assume il valore di quel tag (i valori degli altri campi vengono duplicati dalla riga originale).
+    \end{itemize}
+    \item \textbf{Aggregazione} per Hotel, Stagione e Tipologia di Viaggiatore, calcolando punteggio medio e numero di recensioni.
+\end{itemize}
+
+\paragraph{Risultati:}
+\begin{itemize}
+    \item Lista degli hotel migliori in base alle stagioni e alle tipologie di viaggio selezionate, ordinati per punteggio medio (Figura \ref{fig:stag2}).
+    \item Heatmap Stagionale Hotel per visualizzare dettagliatamente le performance di un hotel in ogni possibile combinazione di stagione e tipologia di viaggio (Figura \ref{fig:stag3}).
+    \item Mappa interattiva che mostra la posizione geografica dei migliori hotel corrispondenti ai criteri della ricerca (Figura \ref{fig:stag4}).
+\end{itemize}
+
+\paragraph{Casi d'uso:} Analisi delle Performance degli hotel in specifiche stagioni (es. hotel ottimi per l'estate ma carenti in inverno), analisi dell'apprezzamento degli hotel da parte di specifiche tipologie di viaggiatori, pianificazione di viaggi in base alle esigenze dell'utente.
+\begin{figure}[ht]
+    \centering
+    \includegraphics[width=0.9\linewidth]{imgs/stag2.png}
+    \caption{Lista degli hotel migliori in base alle stagioni e alle tipologie di viaggio selezionate}
+    \label{fig:stag2}
+\end{figure}
+\begin{figure}[ht]
+    \centering
+    \includegraphics[width=0.9\linewidth]{imgs/stag3.png}
+    \caption{Heatmap Stagionale Hotel}
+    \label{fig:stag3}
+\end{figure}
+\begin{figure}[ht]
+    \centering
+    \includegraphics[width=0.9\linewidth]{imgs/stag4.png}
+    \caption{Mappa migliori hotel corrispondenti ai criteri della ricerca}
+    \label{fig:stag4}
+\end{figure}
+\clearpage
 % -------------------------------------
 \subsection{9. Analisi Durata Soggiorno}
 \textbf{Obiettivo}: Correlare la durata del soggiorno al livello di soddisfazione. \\
