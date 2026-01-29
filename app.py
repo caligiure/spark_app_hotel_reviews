@@ -27,9 +27,20 @@ st.divider()
 def get_spark_session(app_name="HotelReviewsAnalytics"):
     """Initialize SparkSession"""
     # 'local[*]' usa tutti i core disponibili del computer locale
+    # spark_temp è una cartella temporanea per i file di Spark
+    spark_tmp_dir = "c:\\spark_temp"
+    if not os.path.exists(spark_tmp_dir):
+        try:
+            os.makedirs(spark_tmp_dir)
+        except Exception:
+            # Fallback in caso di errore (es. permessi mancanti su C:) usa una cartella nella directory corrente
+            spark_tmp_dir = os.path.abspath("spark_temp")
+            os.makedirs(spark_tmp_dir, exist_ok=True)
+
     spark = SparkSession.builder \
         .appName(app_name) \
         .master("local[*]") \
+        .config("spark.local.dir", spark_tmp_dir) \
         .getOrCreate()
     spark.sparkContext.setLogLevel("WARN") # per ridurre il numero di messaggi di debug in console
     return spark

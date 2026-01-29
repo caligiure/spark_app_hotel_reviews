@@ -32,14 +32,14 @@ Sfruttando le potenzialità di elaborazione distribuita offerte dal framework Sp
     \item Profilazione degli hotel tramite algoritmi di Machine Learning (Clustering).
     \item Studio delle preferenze in base alla nazionalità e tipologia di viaggiatore.
 \end{itemize}
-
+ % -------------------------------------
 \subsection{Architettura Frontend/Backend}
 L'applicazione è stata realizzata seguendo una logica Frontend/Backend:
 \begin{itemize}
     \item \textbf{Backend (Spark)}: Il file \texttt{queries.py} contiene la logica di lavoro. Ogni funzione implementa una diversa analisi dei dati, ma tutte rispettano il seguente schema: accetta un DataFrame Spark in input e restituisce un DataFrame Spark trasformato con i risultati.
     \item \textbf{Frontend (Streamlit)}: Il file \texttt{app.py} gestisce l'interfaccia utente. All'avvio inizializza una \texttt{SparkSession} (cachata per efficienza) e carica il dataset. Quando l'utente seleziona un'analisi, il frontend invoca la funzione corrispondente dal backend, converte i risultati aggregati (di dimensioni ridotte) in Pandas DataFrame e li visualizza tramite grafici e tabelle.
 \end{itemize}
-
+ % -------------------------------------
 \subsection{Tecnologie Utilizzate e Requisti}
 Il progetto è stato sviluppato in Python, utilizzando il framework di Spark per eseguire interrogazioni in maniera scalabile e distribuita. 
 \begin{itemize}
@@ -50,7 +50,7 @@ Il progetto è stato sviluppato in Python, utilizzando il framework di Spark per
     \item \textbf{Visualizzazione}: \textbf{Altair}, \textbf{PyDeck} e \textbf{Pandas} per la creazione di grafici interattivi e mappe geospaziali.
     \item \textbf{Gestione Dipendenze Windows}: Winutils e Hadoop per l'esecuzione locale su ambiente Windows.
 \end{itemize}
-
+ % -------------------------------------
 \subsection{Logica di Funzionamento}
 \begin{enumerate}
     \item L'utente avvia l'applicazione tramite script batch (\texttt{RUN\_APP\_Hotel\_Reviews.bat}) o comando Streamlit (\texttt{python -m streamlit run app.py}).
@@ -64,7 +64,7 @@ Il progetto è stato sviluppato in Python, utilizzando il framework di Spark per
     \item Dopo il caricamento iniziale del dataset in memoria (DataFrame Spark), tramite una sidebar laterale è possibile selezionare una delle query disponibili.
     \item Ogni query espone parametri specifici (es. numero minimo di recensioni, raggio in km) modificabili tramite slider o input box. L'esecuzione della query avviene on-demand sfruttando il motore Spark. I risultati vengono visualizzati in-app tramite grafici, tabelle e mappe interattive.
 \end{enumerate}
-
+ % -------------------------------------
 \section{Descrizione del Dataset Hotel\_Reviews}
 Il dataset utilizzato è \texttt{Hotel\_Reviews.csv} (reperibile su: \url{https://www.kaggle.com/datasets/jiashenliu/515k-hotel-reviews-data-in-europe}. Questo archivio contiene oltre 515.000 recensioni di hotel di lusso in Europa, raccolte dal sito Booking.com, dove sono pubblicamente accessibili. Ogni riga del dataset corrisponde ad una recensione e presenta 17 campi che descrivono sia le caratteristiche dell'hotel, sia l'esperienza del cliente.
 
@@ -72,7 +72,7 @@ Il dataset utilizzato è \texttt{Hotel\_Reviews.csv} (reperibile su: \url{https:
     \item \textbf{Dimensione File}: Circa 238 MB
     \item \textbf{Numero di Righe}: 515.738
 \end{itemize}
-
+ % -------------------------------------
 \subsection{Campi del Dataset}
 \begin{itemize}
     \item \texttt{Hotel\_Address}: Indirizzo dell'hotel.
@@ -93,7 +93,7 @@ Il dataset utilizzato è \texttt{Hotel\_Reviews.csv} (reperibile su: \url{https:
     \item \texttt{lat}: Latitudine dell'hotel.
     \item \texttt{lng}: Longitudine dell'hotel.
 \end{itemize}
-
+ % -------------------------------------
 \section{Descrizione delle Query Implementate}
 
 \subsection{Trend Recensioni (Time Series)}
@@ -130,7 +130,7 @@ Il dataset utilizzato è \texttt{Hotel\_Reviews.csv} (reperibile su: \url{https:
     \caption{Distribuzione Trend vs Punteggio Medio}
     \label{fig:trend3}
 \end{figure}
-
+ % -------------------------------------
 \subsection{Analisi Influenza Tag}
 
 \paragraph{Obiettivo:} Determinare quali fattori (es. "Single Room", "No Window") impattano positivamente o negativamente sul punteggio che i recensori assegnano agli hotel.
@@ -169,7 +169,7 @@ Il dataset utilizzato è \texttt{Hotel\_Reviews.csv} (reperibile su: \url{https:
     \caption{Grafico Affidabilità vs Impatto}
     \label{fig:tag3}
 \end{figure}
-
+ % -------------------------------------
 \subsection{Analisi Bias Nazionalità}
 
 \paragraph{Obiettivo:} Individuare, se esistono, le nazionalità che tendono a dare voti più alti o bassi rispetto alla media.
@@ -202,57 +202,155 @@ Il dataset utilizzato è \texttt{Hotel\_Reviews.csv} (reperibile su: \url{https:
 \begin{figure}[ht]
     \centering
     \includegraphics[width=0.9\linewidth]{imgs/bias3.png}
-    \caption{Correlazione Voto vs Positività Testo}
+    \caption{Grafico Correlazione Voto vs Positività Testo}
     \label{fig:bias3}
 \end{figure}
-
+\clearpage
+ % -------------------------------------
 \subsection{Analisi Competitività Locale}
-\textbf{Obiettivo}: Confrontare le performance di un hotel rispetto ai suoi diretti concorrenti geografici. \\
-\textbf{Logica}: Esegue un self-join del dataset basato sulla distanza geografica (Formula di Haversine). Ogni hotel viene confrontato con tutti gli altri hotel entro un raggio $K$ km. Viene calcolato il delta tra il punteggio dell'hotel e la media del vicinato. \\
-\textbf{Tecnologie}: Join cartesiano ottimizzato con filtri geospaziali, funzioni trigonometriche Spark. \\
-\textbf{Risultati}: Identificazione di "Local Gems" (punteggio alto in zona mediocre) e "Underperformers". \\
-\textbf{Casi d'uso}: Analisi di mercato competitiva per area geografica.
 
+\paragraph{Obiettivo:} Confrontare le performance di un hotel rispetto ai suoi concorrenti geograficamente più vicini.
+\begin{figure}[ht]
+    \centering
+    \includegraphics[width=0.9\linewidth]{imgs/local.png}
+    \caption{Query Analisi Competitività Locale}
+    \label{fig:local}
+\end{figure}
 
+\paragraph{Logica Backend:}
+\begin{itemize}
+    \item Esegue un \textbf{self-join} del dataset per calcolare tutte le possibili coppie di hotel distinti: \texttt{Hotel\_A} e \texttt{Hotel\_B}.
+    \item Calcola la \textbf{distanza geografica fra ogni coppia di hotel} (utilizzando la Formula di Haversine).
+    \item Filtra le coppie di hotel, mantenendo solo quelle che hanno una distanza inferiore a N chilometri (N è un parametro scelto dall'utente).
+    \item Raggruppa per \texttt{Hotel\_A}, ottenendo per ogni hotel il suo vicinato. Poi aggrega i campi degli hotel appartenenti al vicinato, calcolando \textbf{punteggio medio del vicinato} e \textbf{numero di concorrenti}. Infine, calcola \texttt{Score\_Delta =} differenza fra il punteggio di \texttt{Hotel\_A} e la media del vicinato.
+    \item Classifica come \textbf{Outperformer} gli hotel con \texttt{Score\_Delta > 0} e come \textbf{Underperformer} quelli con \texttt{Score\_Delta < 0}. Infine, restituisce il dataset con i valori aggregati appena calcolati.
+\end{itemize}
 
+\paragraph{Risultati:} Vengono visualizzate le classifiche delle \textbf{Gemme Locali (i migliori Outperformer)} e dei \textbf{peggiori Underperformer} (Figura \ref{fig:local2}), ordinate per \texttt{Score\_Delta} decrescente/crescente. Inoltre, viene visualizzato il grafico \textbf{Performance Relativa} (Figura \ref{fig:local3}), che consente di individuare visivamente gli hotel che appartengono all'una o all'altra categoria, confrontando il voto dell'hotel con il voto medio del suo vicinato.
 
-\subsection{1. Top Hotel per Nazione}
-\textbf{Obiettivo}: Identificare le eccellenze alberghiere suddivise per paese. \\
-\textbf{Logica}: La query estrae la nazione dall'indirizzo dell'hotel, raggruppa le strutture per nazione e le ordina in base al punteggio medio (\texttt{Average\_Score}) e al numero di recensioni (come tie-breaker). \\
-\textbf{Tecnologie}: Spark SQL Functions, Window Functions (per il ranking). \\
-\textbf{Risultati}: Lista dei top N hotel per ogni nazione presente nel dataset (UK, France, Italy, etc.). \\
-\textbf{Casi d'uso}: Utenti che cercano i migliori hotel assoluti in una specifica destinazione turistica.
+\paragraph{Casi d'uso:} Analisi della competitività fra attività geograficamente vicine.
+\begin{figure}[ht]
+    \centering
+    \includegraphics[width=0.9\linewidth]{imgs/local2.png}
+    \caption{Classifica migliori Outperformer e peggiori Underperformer}
+    \label{fig:local2}
+\end{figure}
+\begin{figure}[ht]
+    \centering
+    \includegraphics[width=0.9\linewidth]{imgs/local3.png}
+    \caption{Grafico Performance Relativa}
+    \label{fig:local3}
+\end{figure}
+\clearpage
 
+% -------------------------------------
+\subsection{Segmentazione Hotel (K-Means Clustering)}
+\paragraph{Obiettivo:} Raggruppare gli hotel in cluster omogenei (utilizzando K-Means Clustering), sulla base delle seguenti feature: Punteggio Medio, Popolarità (numero recensioni), Verbosità delle recensioni, Posizione geografica, Bias di nazionalità. L'utente seleziona fra queste le caratteristiche sulla base delle quali saranno raggruppati gli hotel. Inoltre, può scegliere il numero di gruppi in cui effettuare la suddivisione.
+\begin{figure}[ht]
+    \centering
+    \includegraphics[width=0.9\linewidth]{imgs/kmeans.png}
+    \caption{Query Segmentazione Hotel (K-Means Clustering)}
+    \label{fig:kmeans}
+\end{figure}
 
+\paragraph{Logica Backend:}
+\begin{itemize}
+    \item Raggruppamento per hotel e aggregazione per il calcolo delle feature.
+    \item Creazione di vettore delle feature con VectorAssembler e normalizzazione con StandardScaler.
+    \item Clustering degli hotel con algoritmo K-Means. 
+\end{itemize}
 
-\subsection{5. Segmentazione Hotel (K-Means Clustering)}
-\textbf{Obiettivo}: Raggruppare gli hotel in cluster omogenei basati su caratteristiche multidimensionali. \\
-\textbf{Logica}: Vengono estratte feature come Punteggio, Popolarità (numero recensioni), Verbosità delle recensioni e Bias di nazionalità. I dati vengono normalizzati e processati dall'algoritmo K-Means. \\
-\textbf{Tecnologie}: \texttt{Spark MLlib} (VectorAssembler, StandardScaler, KMeans pipeline). \\
-\textbf{Risultati}: Assegnazione di ogni hotel a un cluster (es. "Hotel Popolari di Lusso", "Hotel Economici di Nicchia"). \\
-\textbf{Casi d'uso}: Segmentazione di marketing, raccomandazioni di hotel simili.
+\paragraph{Tecnologie:} \texttt{Da Spark MLlib}: VectorAssembler, StandardScaler, KMeans, Pipeline).
 
+\paragraph{Risultati:} Assegnazione di ogni hotel a un cluster (es. "Hotel Popolari di Lusso", "Hotel Economici di Nicchia").
+\begin{itemize}
+    \item Analisi delle caratteristiche di ogni cluster (Figura \ref{fig:kmeans2}).
+    \item Mappa interattiva della distribuzione geografica dei cluster (Figura \ref{fig:kmeans3}).
+    \item Grafico interattivo per l'esplorazione delle performance dei cluster, con possibilità di confrontare: Punteggio medio, Numero di recensioni, Numero medio di parole positive nelle recensioni, Numero medio di parole negative nelle recensioni (Figura \ref{fig:kmeans4}).
+    \item Grafico della distribuzione delle nazionalità dei cluster (Figura \ref{fig:kmeans5}).
+\end{itemize}
+
+\paragraph{Casi d'uso:} Segmentazione di marketing, raccomandazioni di hotel simili.
+\begin{figure}[ht]
+    \centering
+    \includegraphics[width=0.9\linewidth]{imgs/kmeans2.png}
+    \caption{Analisi delle caratteristiche di ogni cluster}
+    \label{fig:kmeans2}
+\end{figure}
+\begin{figure}[ht]
+    \centering
+    \includegraphics[width=0.9\linewidth]{imgs/kmeans3.png}
+    \caption{Mappa interattiva della distribuzione geografica dei cluster}
+    \label{fig:kmeans3}
+\end{figure}
+\begin{figure}[ht]
+    \centering
+    \includegraphics[width=0.9\linewidth]{imgs/kmeans4.png}
+    \caption{Grafico interattivo per l'esplorazione delle performance dei cluster}
+    \label{fig:kmeans4}
+\end{figure}
+\begin{figure}[ht]
+    \centering
+    \includegraphics[width=0.9\linewidth]{imgs/kmeans5.png}
+    \caption{Grafico della distribuzione delle nazionalità dei cluster}
+    \label{fig:kmeans5}
+\end{figure}
+\clearpage
+% -------------------------------------
+\subsection{Migliori Hotel per Nazione}
+
+\paragraph{Obiettivo:} Identificare le eccellenze alberghiere suddivise per paese.
+\begin{figure}[ht]
+    \centering
+    \includegraphics[width=0.9\linewidth]{imgs/top.png}
+    \caption{Query Migliori Hotel per Nazione}
+    \label{fig:top}
+\end{figure}
+
+\paragraph{Logica Backend:}
+\begin{itemize}
+    \item Deduplicazione degli hotel nelle recensioni.
+    \item Estrazione della nazione dall'indirizzo dell'hotel.
+    \item Raggruppamento delle strutture per nazione e ordinamento in base al punteggio medio e al numero di recensioni (in caso di parità).
+\end{itemize}
+
+\paragraph{Risultati:} Viene visualizzata la lista dei top N hotel per ogni nazione presente nel dataset (le nazioni sono presentate in ordine alfabetico) e la distribuzione dei punteggi dei migliori hotel in assoluto (Figura \ref{fig:top2}). Inoltre, viene visualizzata la mappa geografica che mostra dove si trovano gli hotel (Figura \ref{fig:top3}).
+\paragraph{Casi d'uso:} Utenti che cercano i migliori hotel in una specifica destinazione turistica.
+\begin{figure}[ht]
+    \centering
+    \includegraphics[width=0.9\linewidth]{imgs/top2.png}
+    \caption{Top N Hotel per Nazione e Distribuzione dei Punteggi degli Hotel}
+    \label{fig:top2}
+\end{figure}
+\begin{figure}[ht]
+    \centering
+    \includegraphics[width=0.9\linewidth]{imgs/top3.png}
+    \caption{Mappa dei Migliori Hotel}
+    \label{fig:top3}
+\end{figure}
+\clearpage
+% -------------------------------------
 \subsection{7. Locali vs Turisti}
 \textbf{Obiettivo}: Analizzare la differenza di percezione tra chi visita il proprio paese (Local) e chi viene dall'estero (Tourist). \\
 \textbf{Logica}: Confronto tra la nazione dell'hotel e la nazione del recensore. Calcolo separato delle medie per i due gruppi. \\
 \textbf{Tecnologie}: Conditional Aggregation. \\
 \textbf{Risultati}: Identificazione di "Trappole per turisti" (voti turisti $>$ locali) o "Preferiti dai locali". \\
 \textbf{Casi d'uso}: Consigli di viaggio autentici basati sulle preferenze dei locali.
-
+% -------------------------------------
 \subsection{8. Preferenze Stagionali}
 \textbf{Obiettivo}: Analizzare come varia il gradimento in base alla stagione e al tipo di viaggio (Leisure/Business). \\
 \textbf{Logica}: Estrazione del mese dalla data recensione per determinare la stagione. Parsing dei tag per identificare il tipo di viaggio. Aggregazione combinata. \\
 \textbf{Tecnologie}: Date functions, String matching su tags. \\
 \textbf{Risultati}: Performance degli hotel in specifiche stagioni (es. hotel ottimi per l'estate ma carenti in inverno). \\
 \textbf{Casi d'uso}: Pianificazione viaggi in base al periodo.
-
+% -------------------------------------
 \subsection{9. Analisi Durata Soggiorno}
 \textbf{Obiettivo}: Correlare la durata del soggiorno al livello di soddisfazione. \\
 \textbf{Logica}: Utilizzo di Regular Expressions per estrarre il numero di notti dal campo \texttt{Tags} (es. "Stayed 3 nights"). Categorizzazione in Short, Medium, Long stay e calcolo media voti. \\
 \textbf{Tecnologie}: \texttt{regexp\_extract}, conditional logic (\texttt{when/otherwise}). \\
 \textbf{Risultati}: Statistiche che mostrano se i soggiorni lunghi tendono ad avere recensioni peggiori o migliori. \\
 \textbf{Casi d'uso}: Ottimizzazione offerte per soggiorni lunghi/corti.
-
+% -------------------------------------
 \subsection{10. Esperienza del Recensore}
 \textbf{Obiettivo}: Valutare se i recensori esperti sono più critici dei novizi. \\
 \textbf{Logica}: Segmentazione dei recensori in base al campo \\\texttt{Total\_Number\_of\_Reviews\_Reviewer\_Has\_Given} (Novice, Intermediate, Expert). \\
@@ -260,7 +358,7 @@ Confronto delle distribuzioni dei voti. \\
 \textbf{Tecnologie}: Bucketizer o logica condizionale personalizzata. \\
 \textbf{Risultati}: Analisi della severità del voto in funzione dell'esperienza. \\
 \textbf{Casi d'uso}: Ponderazione del peso delle recensioni in un sistema di ranking avanzato.
-
+ % -------------------------------------
 \section{Conclusioni Finali}
 Il progetto ha dimostrato con successo come l'utilizzo di \textbf{Spark} permetta di effettuare analisi complesse e multidimensionali su un dataset di grandi dimensioni con tempi di risposta contenuti. L'architettura implementata garantisce scalabilità orizzontale, potendo gestire volumi di dati ben superiori a quello attuale senza modifiche al codice.
 
