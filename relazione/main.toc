@@ -50,6 +50,17 @@
 \contentsline {paragraph}{Logica Backend:}{20}{section*.33}%
 \contentsline {paragraph}{Risultati:}{20}{section*.34}%
 \contentsline {paragraph}{Casi d'uso:}{20}{section*.35}%
-\contentsline {subsection}{\numberline {3.9}9. Analisi Durata Soggiorno}{22}{subsection.3.9}%
-\contentsline {subsection}{\numberline {3.10}10. Esperienza del Recensore}{22}{subsection.3.10}%
-\contentsline {section}{\numberline {4}Conclusioni Finali}{22}{section.4}%
+\contentsline {subsection}{\numberline {3.9}Analisi Durata Soggiorno}{22}{subsection.3.9}%
+\contentsline {paragraph}{Obiettivo:}{22}{section*.36}%
+\contentsline {paragraph}{Logica Backend:}{22}{section*.37}%
+\contentsline {paragraph}{Risultati:}{22}{section*.38}%
+\contentsline {paragraph}{Casi d'uso:}{22}{section*.39}%
+\contentsline {subsection}{\numberline {3.10}Analisi Esperienza Recensore}{24}{subsection.3.10}%
+\contentsline {paragraph}{Obiettivo:}{24}{section*.40}%
+\contentsline {paragraph}{Logica Backend:}{24}{section*.41}%
+\contentsline {paragraph}{Risultati:}{24}{section*.42}%
+\contentsline {paragraph}{Casi d'uso:}{24}{section*.43}%
+\contentsline {section}{\numberline {4}Conclusioni Finali}{26}{section.4}%
+\contentsline {subsection}{\numberline {4.1}User Interface}{26}{subsection.4.1}%
+\contentsline {subsection}{\numberline {4.2}Analisi dei dati}{26}{subsection.4.2}%
+\contentsline {subsection}{\numberline {4.3}Possibili Sviluppi Futuri}{26}{subsection.4.3}%
