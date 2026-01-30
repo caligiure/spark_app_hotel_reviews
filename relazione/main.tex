@@ -498,22 +498,40 @@ Il dataset utilizzato è \texttt{Hotel\_Reviews.csv} (reperibile su: \url{https:
 
 \paragraph{Risultati:}
 \begin{itemize}
-    \item Viene visualizzato il \textbf{Gap Medio} (Figura ), cioè la differenza fra il voto medio assegnato dagli esperti e il voto medio assegnato dai novizi, calcolato su tutte le recensioni. Questo valore è la \textbf{metrica di riferimento} per valutare quanto in media i recensori esperti sono più critici dei novizi, o viceversa. Inoltre, vengono visualizzate le classifiche degli hotel con la maggior discrepanza (\texttt{Experience\_Gap}) fra la valutazione degli esperti e quella dei novizi, sia in negativo (hotel criticati dagli esperti e apprezzati dai novizi), sia in positivo (hotel apprezzati dagli esperti e criticati dai novizi). Con questi confronti è possibile valutare quanto in media l'esperienza dei recensori impatta sulla valutazione degli hotel e quanto sono concordi o discordi le opinioni di recensori con diversi livelli di esperienza.
-    \item Viene visualizzato un grafico della distribuzione degli hotel in relazione al voto ottenuto dai novizi e dagli esperti (Figura ), che consente di valutare visivamente quanto sono frequenti gli hotel con alta o bassa discrepanza di voti.
+    \item Viene visualizzato il \textbf{Gap Medio} (Figura \ref{fig:esp2}), cioè la differenza fra il voto medio assegnato dagli esperti e il voto medio assegnato dai novizi, calcolato su tutte le recensioni. Questo valore è la \textbf{metrica di riferimento} per valutare quanto in media i recensori esperti sono più critici dei novizi, o viceversa. Inoltre, vengono visualizzate le classifiche degli hotel con la maggior discrepanza (\texttt{Experience\_Gap}) fra la valutazione degli esperti e quella dei novizi, sia in negativo (hotel criticati dagli esperti e apprezzati dai novizi), sia in positivo (hotel apprezzati dagli esperti e criticati dai novizi). Con questi confronti è possibile valutare quanto in media l'esperienza dei recensori impatta sulla valutazione degli hotel e quanto sono concordi o discordi le opinioni di recensori con diversi livelli di esperienza.
+    \item Viene visualizzato un grafico della distribuzione degli hotel in relazione al voto ottenuto dai novizi e dagli esperti (Figura \ref{fig:esp3}), che consente di valutare visivamente quanto sono frequenti gli hotel con alta o bassa discrepanza di voti.
 \end{itemize}
 
-\paragraph{Casi d'uso:} Analisi della severità del voto in funzione dell'esperienza, in funzione di una ponderazione del peso delle recensioni in un sistema di ranking avanzato.
-
-
+\paragraph{Casi d'uso:} Analisi della severità del voto in base dell'esperienza, in funzione di una ponderazione del peso delle recensioni in un sistema di ranking avanzato.
+\begin{figure}[ht]
+    \centering
+    \includegraphics[width=0.9\linewidth]{imgs/esp2.png}
+    \caption{Gap Medio e classifiche degli hotel con la maggior discrepanza (\texttt{Experience\_Gap})}
+    \label{fig:esp2}
+\end{figure}
+\begin{figure}[ht]
+    \centering
+    \includegraphics[width=0.9\linewidth]{imgs/esp3.png}
+    \caption{Grafico Novizi vs Esperti}
+    \label{fig:esp3}
+\end{figure}
+\clearpage
  % -------------------------------------
 \section{Conclusioni Finali}
-Il progetto ha dimostrato con successo come l'utilizzo di \textbf{Spark} permetta di effettuare analisi complesse e multidimensionali su un dataset di grandi dimensioni con tempi di risposta contenuti. L'architettura implementata garantisce scalabilità orizzontale, potendo gestire volumi di dati ben superiori a quello attuale senza modifiche al codice.
 
-\textbf{Obiettivi Soddisfatti}: Tutti i requisiti di analisi descrittiva, diagnostica e predittiva (clustering/trend) sono stati implementati. L'integrazione con Streamlit rende i risultati accessibili e navigabili.
-
+Il progetto dimostra come l'utilizzo di \textbf{Spark} permetta di effettuare analisi complesse su un dataset di grandi dimensioni con \textbf{tempi di risposta contenuti}. L'architettura implementata garantisce \textbf{scalabilità orizzontale}, potendo gestire volumi di dati ben superiori a quello attuale senza modifiche al codice. \\
+L'interfaccia grafica realizzata con \textbf{Streamlit} offre un'esperienza utente semplice e funzionale, consentendo di eseguire le query on-demand e visualizzarne i risultati con facilità. Inoltre, l'utilizzo del sistema \textbf{web-app} rende il frontend dell'applicazione compatibile con diverse tipologie di dispositivo senza richiedere l'installazione di alcun software e la rende accessibile da molteplici dispositivi contemporaneamente. \\
+Le query implementate esplorano diversi metodi di analisi dei dati, fra cui:
+\begin{itemize}
+    \item \textbf{Analisi Descrittiva:} sintetizzare e riassumere i dati storici per descriverne le caratteristiche principali, utilizzando metriche chiave come media e deviazione standard, che offrono un'istantanea della distribuzione e delle tendenze centrali dei dati.
+    \item \textbf{Analisi Diagnostica:} confrontare i dati, scoprire relazioni tra diverse informazioni (analisi di \textbf{correlazione}) e capire l'impatto di un fattore sull'altro (analisi di \textbf{regressione}), in modo da identificare le cause reali dei fenomeni osservati.
+    \item \textbf{Analisi Predittiva:} previsione di risultati (\textbf{clustering/trend}), basandosi sull'uso di algoritmi che imparano dagli schemi presenti nei dati passati per proiettarli nel futuro.
+\end{itemize}
 \textbf{Possibili Sviluppi Futuri}:
 \begin{itemize}
-    \item \textbf{Analisi del Testo Avanzata}: Implementazione di modelli NLP (es. BERT) per Sentiment Analysis granulare sulle recensioni testuali, andando oltre il semplice voto numerico.
+    \item \textbf{Analisi Prescrittiva:} raccomandare le azioni ottimali da intraprendere per raggiungere un risultato desiderato, utilizzando sistemi avanzati che simulano diversi scenari e valutano le opzioni migliori.
+    \item \textbf{Analisi Inferenziale:} fare previsioni o generalizzazioni su una popolazione più ampia basandosi sull'analisi del campione di dati (test di ipotesi, intervalli di confidenza).
+    \item \textbf{Analisi del Testo Avanzata}: implementare modelli NLP per Sentiment Analysis granulare sulle recensioni testuali (es. assegnazione punteggio gradimento da 0 a 100).
     \item \textbf{Streaming}: Integrazione con Spark Structured Streaming per elaborare recensioni in tempo reale.
     \item \textbf{Raccomandation System}: Sviluppo di un motore di raccomandazione collaborativo basato sulla similarità utente-utente trovata nel cluster analysis.
 \end{itemize}
