@@ -1,6 +1,6 @@
 # Fdb version 4
-["pdflatex"] 1770735280.97634 "c:/antigravity/spark_app_hotel_reviews/relazione/main.tex" "main.pdf" "main" 1770735290.15277 0
-  "c:/antigravity/spark_app_hotel_reviews/relazione/main.tex" 1770735279 36995 a7ebd969f8686f01c9d665529cac4c2d ""
+["pdflatex"] 1770738010.89653 "c:/antigravity/spark_app_hotel_reviews/relazione/main.tex" "main.pdf" "main" 1770738019.4224 0
+  "c:/antigravity/spark_app_hotel_reviews/relazione/main.tex" 1770738009 36983 7e98216202f5b510f357514c237cb525 ""
   "c:/texlive/2025/texmf-dist/fonts/enc/dvips/cm-super/cm-super-ts1.enc" 1769274914 2900 1537cc8184ad1792082cd229ecc269f4 ""
   "c:/texlive/2025/texmf-dist/fonts/map/fontname/texfonts.map" 1769277118 3524 cb3e574dea2d1052e39280babc910dc8 ""
   "c:/texlive/2025/texmf-dist/fonts/tfm/jknappen/ec/tcrm1095.tfm" 1769276163 1536 02c06700a42be0f5a28664c7273f82e7 ""
@@ -117,10 +117,10 @@
   "imgs/trend.png" 1769514017 171557 9b25077f6a3aaf73b1e49fbf64b6c0db ""
   "imgs/trend2.png" 1769514133 238787 69ff3ff906942daf8468b11902b3aaf6 ""
   "imgs/trend3.png" 1769514261 146318 d55d7eb62f029bdda1d0b75290d88e94 ""
-  "main.aux" 1770735289 16611 1398e2dfac3202fd065ff85b3923410e "pdflatex"
-  "main.out" 1770735289 4489 0003dbe1227e3eb0229eae2c0c540630 "pdflatex"
-  "main.tex" 1770735279 36995 a7ebd969f8686f01c9d665529cac4c2d ""
-  "main.toc" 1770735289 4499 01a45188ba45b8355217fc701806776f "pdflatex"
+  "main.aux" 1770738019 16611 1398e2dfac3202fd065ff85b3923410e "pdflatex"
+  "main.out" 1770738019 4489 0003dbe1227e3eb0229eae2c0c540630 "pdflatex"
+  "main.tex" 1770738009 36983 7e98216202f5b510f357514c237cb525 ""
+  "main.toc" 1770738019 4499 01a45188ba45b8355217fc701806776f "pdflatex"
   (generated)
   "main.aux"
   "main.log"
