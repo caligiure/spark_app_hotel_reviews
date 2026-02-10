@@ -144,7 +144,7 @@ Il dataset utilizzato è \texttt{Hotel\_Reviews.csv} (reperibile su: \url{https:
 
 \paragraph{Logica Backend:} 
 \begin{itemize}
-    \item Le recensioni vengono "esplose" seguendo la logica di una \textbf{FlatMap}: si prende in input la stringa dei tag di ogni recensione, la stringa viene suddivisa in singoli tag, ciascuno dei quali viene poi "ripulito" da eventuali spazi vuoti o lettere maiuscole, e infine si produce in output una riga per ogni singolo tag letto in input (gli altri campi della riga vengono duplicati dalla recensione originale da cui è stato estratto il tag).
+    \item Le recensioni vengono "esplose": si prende in input la stringa dei tag di ogni recensione, la stringa viene suddivisa in singoli tag, ciascuno dei quali viene poi "ripulito" da eventuali spazi vuoti o lettere maiuscole, e infine si produce in output una riga per ogni singolo tag letto in input (gli altri campi della riga vengono duplicati dalla recensione originale da cui è stato estratto il tag).
     \item Le righe risultanti vengono raggruppate per tag, eseguendo delle operazioni di \textbf{aggregazione} sugli hotel associati ad ogni tag: conteggio del numero di hotel, calcolo del punteggio medio degli hotel e calcolo della \textbf{deviazione standard} (ad esempio, se la deviazione standard è alta, significa che i voti sono molto dispersi, quindi la valutazione del peso di quel tag sarà meno affidabile).
     \item Viene calcolata la \textbf{media globale} sui punteggi medi di tutti i tag, per poter avere un indice di confronto sulla base del quale valutare se un tag ha un \textbf{impatto} positivo o negativo rispetto agli altri (ad esempio, se un tag ha una media di 9.0 e la media globale è 8.5, allora quel tag ha un "impatto positivo" (+0.5)).
     \item Per ogni tag, vengono calcolati: \\
@@ -395,7 +395,7 @@ Il dataset utilizzato è \texttt{Hotel\_Reviews.csv} (reperibile su: \url{https:
 \paragraph{Logica Backend:}
 \begin{itemize}
     \item Estrazione \textbf{mese} dalla data della recensione.
-    \item Estrazione \textbf{tipologia di viaggiatore} analizzando i tag della recensione: poichè una recensione potrebbe appartenere a più tipi contemporaneamente (es. Solo e Business, Group e Leisure), si applica la logica della \textbf{FlatMap}:
+    \item Estrazione \textbf{tipologia di viaggiatore} analizzando i tag della recensione: poichè una recensione potrebbe appartenere a più tipi contemporaneamente (es. Solo e Business, Group e Leisure), si applica la seguente logica:
     \begin{itemize}
         \item si estrae tutta la lista dei tag e si filtrano solo quelli utili
         \item per ogni tag si genera una nuova riga in cui il campo \texttt{Traveler\_Type} assume il valore di quel tag (i valori degli altri campi vengono duplicati dalla riga originale).
@@ -443,7 +443,7 @@ Il dataset utilizzato è \texttt{Hotel\_Reviews.csv} (reperibile su: \url{https:
 
 \paragraph{Logica Backend:}
 \begin{itemize}
-    \item Logica FlatMap per l'estrazione del numero di notti dai tag delle recensioni:
+    \item Logica per l'estrazione del numero di notti dai tag delle recensioni:
     \begin{itemize}
         \item input: tutte le recensioni, output: esplosione del dataset, producendo in output una riga per ogni elemento della lista dei tag di ogni recensione,
         \item filtraggio di tutte le righe che presentano un tag nella forma "Stayed X nights",
