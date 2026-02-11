@@ -88,10 +88,10 @@ def analyze_review_trends(df, min_number_of_reviews = 30):
 
 def analyze_tag_influence(df, min_count=50):
     """
-    Analizza l'influenza dei tag sul punteggio delle recensioni (MapReduce style).
+    Analizza l'influenza dei tag sul punteggio delle recensioni
     
-    Map: Esplode la lista dei tag (stringa) in righe singole.
-    Reduce: Raggruppa per tag e calcola statistiche (media voto, conteggio).
+    Esplode la lista dei tag (stringa) in righe singole.
+    Raggruppa per tag e calcola statistiche (media voto, conteggio).
     
     Args:
         df: DataFrame PySpark con i dati degli hotel
@@ -99,21 +99,21 @@ def analyze_tag_influence(df, min_count=50):
     Returns:
         DataFrame PySpark con le colonne selezionate e i top n hotel per nazione
     """
-    # 1. Pulizia e FlatMap (Explode)
-    # Il campo Tags è una stringa tipo "[' Leisure trip ', ' Couple ', ...]". Dobbiamo rimuovere [ ' ] e splittare per virgola
-    clean_tags = F.regexp_replace(F.col("Tags"), "[\\[\\]']", "") # Trasformazione LAZY: restituisce "Leisure trip, Couple, ..."
-    splitted_tags = F.split(clean_tags, ",") # Trasformazione LAZY: restituisce ["Leisure trip", "Couple", ...]
-    # Explode (FlatMap Phase):
-    # aggiunge una nuova colonna Single_Tag e per calcolarne il valore usa explode(splitted_tags)
+    # 1. Pulizia e Explode
+    # Il campo Tags è una stringa tipo "[' Leisure trip ', ' Couple ', ...]".
+    # Trasformazione LAZY: restituisce "Leisure trip, Couple, ..."
+    clean_tags = F.regexp_replace(F.col("Tags"), "[\\[\\]']", "") 
+    # Trasformazione LAZY: restituisce ["Leisure trip", "Couple", ...]
+    splitted_tags = F.split(clean_tags, ",") 
     # explode(splitted_tags), crea una nuova riga per ogni elemento dell'array splitted_tags
-    # Esempio: se una riga ha Tags = "[Leisure Trip, Couple]", explode crea due righe: una con Single_Tag = 'Leisure Trip' e una con Single_Tag = 'Couple'
+    # Esempio: se una riga ha Tags = "[Leisure Trip, Couple]", 
+    # explode crea due righe: una con Single_Tag = 'Leisure Trip' e una con Single_Tag = 'Couple'
     # (gli altri campi vengono duplicati dalla riga originale)
-    # Quindi si comporta come una FLATMAP: da 1 riga ne crea N (dove N è il numero di tag)
     exploded_df = df.withColumn("Single_Tag", F.explode(splitted_tags))
     # Trim degli spazi bianchi dai tag generati
     exploded_df = exploded_df.withColumn("Single_Tag", F.trim(F.col("Single_Tag")))
     
-    # 2. Reduce (GroupBy + Aggregations)
+    # 2. GroupBy + Aggregations
     # Raggruppa per tag e calcola statistiche (media voto, conteggio).
     tag_stats = exploded_df.groupBy("Single_Tag").agg(
         F.count("Reviewer_Score").alias("Count"), # conta le occorrenze di ogni tag
@@ -164,12 +164,12 @@ def analyze_nationality_bias(df, min_reviews=50):
     Returns:
         DataFrame con statistiche per nazionalità
     """
-    # 1. Map (riga df -> riga clean_df) e Clean (Rimuoviamo spazi extra e filtriamo eventuali null)
+    # 1. Clean (Rimuoviamo spazi extra e filtriamo eventuali null)
     clean_df = df.withColumn("Reviewer_Nationality", F.trim(F.col("Reviewer_Nationality"))) \
                  .filter(F.col("Reviewer_Nationality").isNotNull()) \
                  .filter(F.col("Reviewer_Nationality") != "")
 
-    # 2. Reduce (GroupBy + Aggregations) (gruppo di righe di clean_df -> riga nation_stats)
+    # 2. GroupBy + Aggregations (gruppo di righe di clean_df -> riga nation_stats)
     nation_stats = clean_df.groupBy("Reviewer_Nationality").agg(
         F.count("Reviewer_Score").alias("Count"), # conta le occorrenze di ogni nazionalità
         F.avg("Reviewer_Score").alias("Average_Score"), # calcola la media dei voti per ogni nazionalità
@@ -213,13 +213,12 @@ def analyze_local_competitiveness(df, km_radius=2.0, min_competitors=3):
     ).dropDuplicates(["Hotel_Name"]).dropna(subset=["lat", "lng"])
 
     # 2. Self-Join, calcolo delle distanze, filter per distanza < radius
-
     # Rinominiamo per distinguere Hotel A (Target) e Hotel B (Neighbor)
     left = hotels.alias("a")
     right = hotels.alias("b")
     joined = left.crossJoin(right).filter(F.col("a.Hotel_Name") != F.col("b.Hotel_Name"))
     
-    # Formula Haversine in Spark SQL: serve a calcolare la distanza in linea d'aria tra due punti su una sfera (la Terra)
+    # Formula Haversine: serve a calcolare la distanza in linea d'aria tra due punti su una sfera (la Terra)
     #   1. Le coordinate lat e lng sono in gradi, ma la trigonometria funziona in radianti, quindi vanno convertite con F.radians(...)
     #   2. R = 6371 km (Raggio Terra)
     #   3. dLat = rad(lat2 - lat1)                                             Differenza tra latitudini in radianti
@@ -238,11 +237,10 @@ def analyze_local_competitiveness(df, km_radius=2.0, min_competitors=3):
                                     F.pow(F.sin(F.col("dlon") / 2), 2)) \
                    .withColumn("angle", 2 * F.asin(F.sqrt(F.col("distance")))) \
                    .withColumn("distance_km", F.lit(6371.0) * F.col("angle"))
-    
     # Filtriamo per distanza < radius
     neighbors = joined.filter(F.col("distance_km") <= km_radius)
     
-    # 3. Aggregazione (Reduce)
+    # 3. Aggregazione
     # Raggruppiamo per Hotel A e calcoliamo stats dei vicini
     stats = neighbors.groupBy("a.Hotel_Name", "a.Average_Score").agg(
         F.avg("b.Average_Score").alias("Neighborhood_Avg_Score"),
@@ -527,7 +525,7 @@ def analyze_seasonal_preferences(df, min_reviews=10):
         DataFrame con statistiche per Hotel, Stagione e Tipologia Viaggiatore.
     """
     
-    # 1. Data Parsing & Enrichment (Map Logic)
+    # 1. Data Parsing & Enrichment
     
     # Conversione data per estrarre il mese: Review_Date è stringa 'M/d/yyyy' -> parsing a pyspark.sql.types.DateType
     df_enriched = df.withColumn("Review_Date_Parsed", F.to_date(F.col("Review_Date"), "M/d/yyyy")) \
@@ -574,7 +572,7 @@ def analyze_seasonal_preferences(df, min_reviews=10):
                              .withColumnRenamed("Traveler_Type_Raw", "Traveler_Type")
     # Se una recensione non ha nessun tag riconosciuto, apparirà solo con il tag "Other"
 
-    # 2. Aggregazione (Reduce Logic): raggruppa per Hotel, Stagione e Tipologia
+    # 2. Aggregazione: raggruppa per Hotel, Stagione e Tipologia
     stats = df_exploded.groupBy(
         "Hotel_Name", 
         "Hotel_Address", # per conoscere la nazione dell'hotel
@@ -614,7 +612,7 @@ def analyze_stay_duration(df, min_reviews=10):
         DataFrame con statistiche per categoria di durata
     """
     
-    # 1. Estrazione Durata Soggiorno (Map Phase: da stringa (tag "Stayed X nights") -> numero di notti)
+    # 1. Estrazione Durata Soggiorno (da stringa (tag "Stayed X nights") -> numero di notti)
 
     clean_tags = F.regexp_replace(F.col("Tags"), "[\\[\\]']", "") # Pulisce la stringa di tags eliminando parentesi quadre [ ] e apici '
     splitted_tags = F.split(clean_tags, ",") # Divide la stringa di tags in singole stringhe ottenendo una colonna di tag singoli
@@ -671,7 +669,7 @@ def analyze_reviewer_experience(df, min_reviews_per_level=5):
         DataFrame con Avg Score per ogni livello e il Gap (Expert - Novice).
     """
     
-    # 1. Definizione Categorie Esperienza (Map Phase)
+    # 1. Definizione Categorie Esperienza
     # Usiamo il campo Total_Number_of_Reviews_Reviewer_Has_Given
     df_exp = df.withColumn(
         "Experience_Level",
@@ -681,7 +679,7 @@ def analyze_reviewer_experience(df, min_reviews_per_level=5):
          .otherwise("Expert")
     )
     
-    # 2. Aggregazione (Reduce Phase)
+    # 2. Aggregazione
     # Pivot sui livelli di esperienza: per ogni hotel, per ogni livello di esperienza, calcola il punteggio medio e il numero di recensioni
     stats = df_exp.groupBy("Hotel_Name").pivot("Experience_Level", ["Novice", "Intermediate", "Expert"]).agg(
         F.avg("Reviewer_Score").alias("Avg_Score"), # alias fa diventare {Value}_{Alias} -> Expert_Avg_Score
