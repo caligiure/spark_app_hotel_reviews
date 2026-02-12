@@ -19,6 +19,17 @@ def analyze_review_trends(df, min_number_of_reviews = 30):
         DataFrame PySpark con le colonne selezionate e i top n hotel per nazione
     """
 
+    # L'obiettivo è calcolare il trend (la pendenza della regressione) specificamente per ogni singolo hotel. 
+    # Abbiamo bisogno di migliaia di piccoli modelli (uno per hotel). 
+    # Con groupby("Hotel_Name").applyInPandas(...), Spark distribuisce i dati degli hotel ai vari worker. 
+    # Ogni worker riceve i dati di un hotel, li converte in Pandas e addestra un modello scikit-learn locale in millisecondi. 
+
+    # I dati delle recensioni per un singolo hotel stanno comodamente in memoria (RAM) di un singolo worker. 
+    # MLlib è necessario quando i dati di training non entrano nella memoria di una sola macchina.
+    # È progettato per addestrare un unico grande modello su enormi dataset distribuiti. 
+    # Usare MLlib per addestrare migliaia di modelli separati (uno per hotel) sarebbe molto complesso e inefficiente, 
+    # perché l'overhead di gestione del framework distribuito per ogni piccolo modello supererebbe di gran lunga il tempo di calcolo effettivo.
+
     # UDF Pandas che verrà eseguita su ogni gruppo (Hotel)
     # pdf è un pandas DataFrame contenente le recensioni di UN solo hotel
     # Nota: è importante definire una funzione Pandas, che sarà eseguita con applyInPandas,
