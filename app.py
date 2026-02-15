@@ -126,7 +126,7 @@ try:
                         declining = trends_pdf[trends_pdf['Trend_Slope'] < 0].sort_values('Trend_Slope', ascending=True).head(10)
                         st.dataframe(declining[['Hotel_Name', 'Trend_Slope', 'Review_Count', 'Average_Score_Calculated', 'Average_Score', 'First_Review_Date', 'Last_Review_Date']], width='stretch')
                         # Scatter Plot (altair chart) per Trend vs Punteggio Medio
-                        st.subheader("Distribuzione Trend vs Punteggio Medio")
+                        st.subheader("Trend vs Punteggio Medio")
                         st.markdown("""
                         In questo grafico è possibile osservare la distribuzione dei trend in relazione al punteggio medio degli hotel.
                         * **^ In alto** si trovano gli hotel con trend positivo (in crescita)
